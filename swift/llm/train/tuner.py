@@ -382,6 +382,11 @@ class TunerMixin:
             model.train()
             model.requires_grad_(True)
 
+            #NOTE: This may fix index errors, seen in OI as well:
+            if len(template.tokenizer) % 8 != 0:
+                model.resize_token_embeddings(len(template.tokenizer), pad_to_multiple_of=8)
+                logger.info(f"XXX - Resized token_embeddings to {len(template.tokenizer)}")
+
             freeze_parameters(model, args.freeze_parameters_ratio, args.freeze_parameters, args.freeze_parameters_regex)
             if args.trainable_parameters or args.trainable_parameters_regex:
                 activate_parameters(model, args.trainable_parameters, args.trainable_parameters_regex)

@@ -5,6 +5,8 @@ from typing import List
 
 
 class LLMModelType:
+    granite = 'granite'
+    
     qwen = 'qwen'
     qwen2 = 'qwen2'
     qwen2_5 = 'qwen2_5'

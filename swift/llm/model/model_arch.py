@@ -9,6 +9,8 @@ transformers_ge_4_52 = version.parse(transformers.__version__) >= version.parse(
 
 
 class LLMModelArch:
+    granite = 'granite'
+    
     qwen = 'qwen'
     llama = 'llama'
     internlm2 = 'internlm2'

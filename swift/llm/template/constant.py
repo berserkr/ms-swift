@@ -4,6 +4,8 @@ from typing import List
 
 
 class LLMTemplateType:
+    granite = 'granite'
+
     chatml = 'chatml'
     default = 'default'
     dummy = 'dummy'
