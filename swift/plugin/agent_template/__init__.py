@@ -26,5 +26,5 @@ agent_templates = {
     'llama4': Llama4AgentTemplate,
     # extra
     'react_grpo': ReactGRPOAgentTemplate,
-    'granite' : GraniteAgentTemplate,
+    'granite_agentic' : GraniteAgentTemplate,
 }

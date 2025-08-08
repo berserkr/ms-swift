@@ -4,6 +4,8 @@ import inspect
 import math
 import os
 import re
+import ast
+import json
 from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from dataclasses import asdict
@@ -202,8 +204,12 @@ class Template(ProcessorMixin):
                     norm_width, norm_height = image.width, image.height
                 bbox[2 * i] = int(round(x / width * norm_width))
                 bbox[2 * i + 1] = int(round(y / height * norm_height))
-
+    
     def _preprocess_function_call(self, inputs: StdTemplateInputs) -> None:
+        
+        #logger.info(
+        #    f'LUISMODS: _preprocess_function_call: {inputs.messages}.')
+        
         agent_template = self.agent_template
         agent_template.template_meta = self.template_meta  # for hermes
         if inputs.tools:
@@ -230,10 +236,27 @@ class Template(ProcessorMixin):
             else:
                 i += 1
 
+        #LUISMODS: It could be the case that there are no `tool_call` but tool_call in assistant...
+        #SHOULD not be done here...
+        """
+        i = 0
+        while i < len(messages):
+            if messages[i]['role'] == 'assistant' and 'tool_call' in messages[i]['content']:
+                messages[i]['content'] = agent_template._fix_tool_calls(messages[i]['content'])
+            i += 1
+
+        logger.info(
+            f'LUISMODS: _preprocess_function_call: {messages}.')
+        """
+
     def _preprocess_inputs(
         self,
         inputs: StdTemplateInputs,
     ) -> None:
+        
+        #logger.info(
+        #    f'LUISMODS: _preprocess_inputs: {inputs.messages}.')
+        
         self._preprocess_function_call(inputs)
         if self.model_meta.is_multimodal:
             self._replace_image_tags(inputs)
@@ -992,6 +1015,9 @@ class Template(ProcessorMixin):
         if len(messages) % 2 == 1:
             messages.append({'role': 'assistant', 'content': None})  # inference
 
+        #logger.info(
+        #    f'LUISMODS: _get_std_messages: {messages}.')
+
     def _jinja_encode(self, inputs: StdTemplateInputs):
         messages = inputs.messages.copy()
         if inputs.system is not None:
@@ -1002,6 +1028,8 @@ class Template(ProcessorMixin):
         kwargs = {}
         if inputs.tools:
             kwargs['tools'] = inputs.tools
+        if inputs.documents:
+            kwargs['documents'] = inputs.documents
         text = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=add_generation_prompt, **kwargs)
         answer_len = 1 if self.is_training else 0
@@ -1011,13 +1039,47 @@ class Template(ProcessorMixin):
         template_meta = self.template_meta
         system = inputs.system
         tools = inputs.tools
+        documents  = inputs.documents
         template_meta.check_system(system)
         if system is None:
             system = template_meta.default_system
 
         if tools is not None:
-            system = self.agent_template._format_tools(tools, system or '', inputs.messages[0])
+            tools_system = self.agent_template._format_tools(tools, system or '', inputs.messages[0])
+        if documents is not None:
+            documents_system = self._format_documents(documents)
+        
+        if system is None:
+            if tools and documents:
+                system = tools_system + '\n\n' + documents_system
+            elif tools:
+                system = tools_system
+            elif documents:
+                system = documents_system
+        else:
+            if tools and documents:
+                system = system + '\n\n' + tools_system + '\n\n' + documents_system
+            elif tools:
+                system = system + '\n\n' + tools_system
+            elif documents:
+                system = system + '\n\n' + documents_system
+
         return system
+
+    def _format_documents(self, documents):
+        if isinstance(documents, str):
+            documents = json.loads(documents)
+        
+        # edit 1 - removed \n as it adds an extra line in chat template
+        docs_descs = [f"{json.dumps(document, ensure_ascii=False)}" for document in documents]
+        return f"""You are a helpful assistant with access to the following documents. You may use one or more documents to assist with the user query.
+
+You are given a list of documents within <documents></documents> XML tags:
+<documents>
+""" + '\n'.join(docs_descs) + """
+</documents>
+
+Write the response to the user\'s input by strictly aligning with the facts in the provided documents. If the information needed to answer the question is not available in the documents, inform the user that the question cannot be answered based on the available data."""
 
     def _swift_prepare_messages(self, messages):
         if len(messages) < 2:
@@ -1043,6 +1105,10 @@ class Template(ProcessorMixin):
                 i += 1
 
     def _swift_encode(self, inputs: StdTemplateInputs):
+
+        #logger.info(
+        #    f'LUISMODS: _swift_encode: {inputs.messages}.')
+                
         template_meta = self.template_meta
         system = self._get_system(inputs)
         self._swift_prepare_messages(inputs.messages)

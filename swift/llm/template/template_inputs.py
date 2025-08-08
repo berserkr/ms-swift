@@ -6,7 +6,7 @@ import json
 from PIL import Image
 
 from swift.utils import get_logger
-from ..utils import Messages, Tool, messages_to_history
+from ..utils import Messages, Tool, Document, messages_to_history
 
 logger = get_logger()
 
@@ -101,6 +101,9 @@ class StdTemplateInputs:
     system: Optional[str] = None
     tools: Optional[List[Tool]] = None
 
+    # Added for RAG support
+    documents: Optional[List[Document]] = None
+
     rejected_response: Optional[str] = None
     label: Optional[int] = None
     channel: Optional[str] = None
@@ -142,6 +145,7 @@ class StdTemplateInputs:
                 kwargs[key] = inputs[key]
         messages = inputs['messages']
         tools = inputs.get('tools')
+        documents = inputs.get('documents')
         objects = inputs.get('objects') or {}
 
         if messages and messages[0]['role'] == 'system':
@@ -172,7 +176,7 @@ class StdTemplateInputs:
         all_keys = set(f.name for f in fields(StdTemplateInputs))
         extra_kwargs = {k: v for k, v in inputs.items() if k not in all_keys}
         return cls(
-            messages=messages, system=system, tools=tools, objects=objects, **kwargs, **media_kwargs), extra_kwargs
+            messages=messages, system=system, tools=tools, documents=documents, objects=objects, **kwargs, **media_kwargs), extra_kwargs
 
     @staticmethod
     def remove_messages_media(messages: Messages) -> Dict[str, Any]:

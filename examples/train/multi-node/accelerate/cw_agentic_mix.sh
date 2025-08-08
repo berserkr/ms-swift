@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --partition=hpc-high
+#SBATCH --partition=hpc-mid
 #SBATCH --nodes=16
-#SBATCH --job-name=7b-p4-lc-128k-swift-merged_dataset
+#SBATCH --job-name=7b-p4-lc-128k-swift-hermes3-tools-rag-32k-auxloss
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-merged_dataset-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-merged_dataset-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-hermes3-tools-rag-32k-auxloss-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-hermes3-tools-rag-32k-auxloss-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -80,7 +80,7 @@ PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
 #container_image="/mnt/vast/squash/open-instruct-g4-tf4520.sqsh"
 
 container_mounts="/mnt:/mnt"
-container_image="/mnt/vast/squash/swift.sqsh"
+container_image="/mnt/vast/squash/swift_v2.sqsh"
 LOG=/mnt/vast/proj/checkpoints/bathen/logs/${SHORT_NAME}_${SLURM_JOBID}.log
 
 # from MLPerf team -- need top review 
@@ -157,38 +157,37 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     --main_process_port ${MASTER_PORT} \
     --rdzv_backend c10d \
     "
-
 echo $DISTRIBUTED_ARGS >> $LOG
 
-#export CUDA_LAUNCH_BLOCKING=1
 export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/lc-ckpts/7b-p4-lc-128k/hf \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/mixes/merged_dataset.jsonl \
-    --torch_dtype bfloat16 \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/mixes/hermes3-tools-rag.jsonl \
     --split_dataset_ratio 0.01 \
-    --num_train_epochs 3 \
+    --torch_dtype bfloat16 \
+    --num_train_epochs 5 \
+    --loss_scale granite \
+    --per_device_train_batch_size 1 \
+    --per_device_eval_batch_size 1 \
     --learning_rate 1e-5 \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 8 \
     --gradient_accumulation_steps 1 \
+    --packing true \
     --eval_steps 500 \
     --save_steps 500 \
     --logging_steps 1 \
-    --max_length 16384 \
+    --max_length 32768 \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 32 \
     --dataset_num_proc 32 \
     --save_total_limit 3 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/7b-p4-lc-128k-swift-merged_dataset-16k-3ep \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/7b-p4-lc-128k-swift-hermes3-tools-rag-32k-auxloss \
     --attn_impl flash_attn \
     --use_chat_template true \
     
     "
-
 echo $SCRIPT_ARGS >> $LOG
 
-CONFIG=/mnt/home/bathen/src/github.com/gneiss-engine/configs/fsdp/fsdp_accelerate_mamba.yaml
+CONFIG=examples/train/multi-node/accelerate/fsdp_accelerate.yaml
 SCRIPT=swift/cli/sft.py
 
 echo "CUDA DEVICES: ${CUDA_VISIBLE_DEVICES}" >> $LOG

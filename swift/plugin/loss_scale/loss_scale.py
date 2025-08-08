@@ -118,6 +118,10 @@ class HermesLossScale(REACTLossScale):
     loss_scale_config = 'hermes.json'
 
 
+class GraniteLossScale(REACTLossScale):
+    loss_scale_config = 'granite.json'
+
+
 class AlphaUmiLossScale(REACTLossScale):
     loss_scale_config = 'alpha_umi.json'
 
@@ -131,6 +135,12 @@ class TrainAllLossScale(LossScale):
 class IgnoreEmptyThink(REACTLossScale):
     loss_scale_config = 'ignore_empty_think.json'
 
+
+class IgnoreThink(REACTLossScale):
+    loss_scale_config = 'ignore_think.json'
+
+class GrantieFusionLossScale(REACTLossScale):
+    loss_scale_config = 'granite_fusion.json'
 
 class LastRoundWithIgnoreEmptyThink(LossScale):
     loss_scale_config = 'ignore_empty_think.json'
@@ -155,11 +165,14 @@ loss_scale_map = {
     'last_round': LastRoundLossScale,
     'default': LossScale,
     'all': TrainAllLossScale,
+    'granite_fusion': GrantieFusionLossScale,
     'ignore_empty_think': IgnoreEmptyThink,
+    'ignore_think': IgnoreThink, 
     'last_round_with_ignore_empty_think': LastRoundWithIgnoreEmptyThink,
     # agent
     'react': REACTLossScale,
     'hermes': HermesLossScale,
+    'granite': GraniteLossScale,
     'qwen': QwenLossScale,
     'agentflan': AgentFlanLossScale,
     'alpha_umi': AlphaUmiLossScale,

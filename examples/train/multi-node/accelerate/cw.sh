@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --partition=hpc-high
+#SBATCH --partition=hpc-mid
 #SBATCH --nodes=16
-#SBATCH --job-name=7b-p4-lc-128k-swift-simple-ct
+#SBATCH --job-name=7b-p4-lc-128k-swift-v2-datasets-0801-pack-5ep-4acc-lossscale-3e-5-32768
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-simple-ct-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-simple-ct-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-v2-datasets-0801-pack-5ep-4acc-lossscale-3e-5-32768-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-v2-datasets-0801-pack-5ep-4acc-lossscale-3e-5-32768-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -20,10 +20,10 @@
 #### Variables
 PER_DEVICE_TRAIN_BATCH_SIZE=2
 GRADIENT_ACCUMULATION_STEPS=8 #2 # has to be 2 for 30b, 1 for 120b
-#SEQLEN=32768
+#SEQLEN=16384
 #SEQLEN=40960
 #SEQLEN=24576
-SEQLEN=16384
+SEQLEN=32768
 #SEQLEN=4096
 #LR=9e-05
 LR=5e-06
@@ -49,7 +49,7 @@ SHORT_NAME=7b-p4-lc-128k
 MODEL_PATH=$MODEL_BASE_PATH/$NAME
 #DATA_MIX_PATH=/mnt/vast/proj/checkpoints/bathen/datasets/sft/tokenized/tulu3_sft_jsonl/40k
 #DATA_MIX_PATH=/mnt/vast/proj/datasets/sft-datasets/g4-stage1-tokenized/mixtures/
-DATA_MIX_PATH=/mnt/vast/proj/datasets/sft-datasets/fusion
+DATA_MIX_PATH=/mnt/vast/proj/datasets/sft-datasets/jsonl/mixes/ash_mix 
 OUTPUT_BASE_PATH=/mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft
 OUTPUT_MODEL_NAME="${SHORT_NAME}-${MIX_NAME}-${SEQLEN}-${GRADIENT_ACCUMULATION_STEPS}-${PER_DEVICE_TRAIN_BATCH_SIZE}-${NUM_EPOCHS}-${LR}-${CLIP}-${ID}"
 OUTPUT_MODEL_PATH="${OUTPUT_BASE_PATH}/${OUTPUT_MODEL_NAME}-model"
@@ -80,7 +80,7 @@ PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
 #container_image="/mnt/vast/squash/open-instruct-g4-tf4520.sqsh"
 
 container_mounts="/mnt:/mnt"
-container_image="/mnt/vast/squash/swift.sqsh"
+container_image="/mnt/vast/squash/swift_v2.sqsh"
 LOG=/mnt/vast/proj/checkpoints/bathen/logs/${SHORT_NAME}_${SLURM_JOBID}.log
 
 # from MLPerf team -- need top review 
@@ -159,32 +159,36 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/edited/7b-p4-lc-128k \
+export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/lc-ckpts/7b-p4-lc-128k/hf \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/os/Chinese-DeepSeek-R1-Distill-data-110k \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0801/mix_debug_5k.jsonl \
     --torch_dtype bfloat16 \
-    --max_steps 2000 \
-    --streaming true \
-    --learning_rate 1e-5 \
-    --gradient_accumulation_steps 2 \
+    --split_dataset_ratio 0.01 \
+    --num_train_epochs 5 \
+    --per_device_train_batch_size 1 \
+    --per_device_eval_batch_size 1 \
+    --learning_rate 3e-5 \
+    --gradient_accumulation_steps 4 \
     --packing true \
-    --eval_steps 250 \
-    --save_steps 250 \
+    --eval_steps 100 \
+    --save_steps 100 \
     --logging_steps 1 \
-    --max_length 8192 \
+    --max_length 32768 \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 32 \
     --dataset_num_proc 32 \
-    --save_total_limit 2 \
+    --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/7b-p4-lc-128k-swift-ct-simple \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/7b-p4-lc-128k-swift-v2-datasets-0801-pack-5ep-4acc-lossscale-3e-5-32768 \
     --attn_impl flash_attn \
     --use_chat_template true \
-    
+    --loss_scale granite \
     "
+
+#    --loss_scale granite \
 echo $SCRIPT_ARGS >> $LOG
 
-CONFIG=/mnt/home/bathen/src/github.com/gneiss-engine/configs/fsdp/fsdp_accelerate_mamba.yaml
+CONFIG=examples/train/multi-node/accelerate/fsdp_accelerate.yaml
 SCRIPT=swift/cli/sft.py
 
 echo "CUDA DEVICES: ${CUDA_VISIBLE_DEVICES}" >> $LOG

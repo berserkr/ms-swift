@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from swift.llm.infer import Function
     from swift.llm.template import Prompt
 
+from swift.utils import get_logger
+
+logger = get_logger()
 
 class GraniteAgentTemplate(BaseAgentTemplate):
 
@@ -53,26 +56,54 @@ class GraniteAgentTemplate(BaseAgentTemplate):
         return assistant_content, res
 
     def _format_tools(self, tools: List[Union[str, dict]], system: str, user_message=None) -> str:
+        # edit 1 - added new line as our chat template has \n
+        # edit 2 - new line causes too many lines between calls... 
         tool_descs = [json.dumps(self.wrap_tool(tool), ensure_ascii=False) for tool in tools]
-        return f"""{system}
-
-# Tools
-
-You may call one or more functions to assist with the user query.
+        return f"""You are a helpful assistant with access to the following tools. You may call one or more tools to assist with the user query.
 
 You are provided with function signatures within <tools></tools> XML tags:
 <tools>
 """ + '\n'.join(tool_descs) + """
 </tools>
 
-For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+For each tool call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
 <tool_call>
-{"name": <function-name>, "arguments": <args-json-object>}
-</tool_call>"""
+{\"name\": <function-name>, \"arguments\": <args-json-object>}
+</tool_call>. If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request."""
 
-    def _format_tool_calls(self, tool_call_messages):
+    def _format_tool_calls(self, tool_call_messages) -> str:
         tool_calls = []
         for message in tool_call_messages:
             tool_call = self._parse_tool_call(message['content'])
-            tool_calls.append(f'<tool_call>\n{json.dumps(tool_call, ensure_ascii=False)}\n</tool_call>')
+            if isinstance(tool_call, list):
+                for tc in tool_call:
+                    tool_calls.append(f'<tool_call>\n{json.dumps(tc, ensure_ascii=False)}\n</tool_call>')
+            else:
+                tool_calls.append(f'<tool_call>\n{json.dumps(tool_call, ensure_ascii=False)}\n</tool_call>')
         return '\n'.join(tool_calls)
+    
+    
+    def _fix_tool_calls(text):
+
+        # do not break things!
+        try: 
+            pattern = r"<tool_call>\s*([\s\S]*?)\s*</tool_call>"
+            matches = re.findall(pattern, text, re.DOTALL)
+            fixed_text = ''
+            for match in matches:
+                try:
+                    parsed = json.loads(match)
+                    if isinstance(parsed, list):
+                        for item in parsed:
+                            fixed_text += f"<tool_call>\n{json.dumps(item).strip()}\n</tool_call>\n"
+                    else:
+                        fixed_text += f"<tool_call>\n{json.dumps(parsed).strip()}\n</tool_call>\n"
+                except:
+                    # load it as a dict from string...
+                    actual_dict = ast.literal_eval(match)
+                    fixed_text += f"<tool_call>\n{json.dumps(actual_dict).strip()}\n</tool_call>\n"
+        except:
+            return text
+        
+        return fixed_text
+

@@ -218,6 +218,7 @@ class SwiftSft(SwiftPipeline, TunerMixin):
         self._save_val_dataset(val_dataset)
         is_grpo = hasattr(args, 'rlhf_type') and args.rlhf_type == 'grpo'
         predict_with_generate = getattr(args, 'predict_with_generate', False)
+        
         if not is_grpo:
             if args.packing:
                 packing_dataset_cls = IterablePackingDataset if args.streaming else PackingDataset
@@ -253,7 +254,7 @@ class SwiftSft(SwiftPipeline, TunerMixin):
                         num_proc=args.dataset_num_proc,
                         load_from_cache_file=args.load_from_cache_file,
                         strict=args.strict)
-
+                    
             if is_master():
                 inputs = train_dataset[0] if hasattr(train_dataset, '__len__') else next(iter(train_dataset))
                 template.print_inputs(inputs, tokenizer_kwargs=inputs.pop('tokenizer_kwargs', None) or {})
