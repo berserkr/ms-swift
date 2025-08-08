@@ -1,0 +1,4 @@
+{
+    "<think>\\s*": [0.0],
+    "<tool_call>.+?</tool_call>": [2.0]
+}
