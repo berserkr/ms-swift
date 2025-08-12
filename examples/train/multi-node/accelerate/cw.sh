@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
 #SBATCH --nodes=16
-#SBATCH --job-name=7b-p4-lc-128k-swift-v2-datasets-0801-pack-5ep-4acc-lossscale-3e-5-32768
+#SBATCH --job-name=7b-p4-lc-128k-swift-v2-ctv1-datasets-0812-pack-4ep-4acc-loss_scale-5e-5-32768
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-v2-datasets-0801-pack-5ep-4acc-lossscale-3e-5-32768-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-v2-datasets-0801-pack-5ep-4acc-lossscale-3e-5-32768-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-v2-ctv1-datasets-0812-pack-4ep-4acc-loss_scale-5e-5-32768-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-v2-ctv1-datasets-0812-pack-4ep-4acc-loss_scale-5e-5-32768-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -161,13 +161,13 @@ echo $DISTRIBUTED_ARGS >> $LOG
 
 export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/lc-ckpts/7b-p4-lc-128k/hf \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0801/mix_debug_5k.jsonl \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0812/phase1_mix.jsonl \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
-    --num_train_epochs 5 \
+    --num_train_epochs 4 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --learning_rate 3e-5 \
+    --learning_rate 5e-5 \
     --gradient_accumulation_steps 4 \
     --packing true \
     --eval_steps 100 \
@@ -179,7 +179,7 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/c
     --dataset_num_proc 32 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/7b-p4-lc-128k-swift-v2-datasets-0801-pack-5ep-4acc-lossscale-3e-5-32768 \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/7b-p4-lc-128k-swift-v2-ctv1-datasets-0812-pack-4ep-4acc-loss_scale-5e-5-32768 \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
