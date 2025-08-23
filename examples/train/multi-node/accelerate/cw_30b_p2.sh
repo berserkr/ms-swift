@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
-#SBATCH --nodes=16
-#SBATCH --job-name=7b-p4-lc-128k-swift-v2-ctv1-phase1_mix_0812_v3-pack-4ep-4acc-loss_scale-5e-5-32768
+#SBATCH --nodes=32
+#SBATCH --job-name=30b-p2-swift-v2-phase2_code_mix_0812-pack-3ep-4acc-granite_fusion-5e-5-32768
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-v2-ctv1-phase1_mix_0812_v3-pack-4ep-4acc-loss_scale-5e-5-32768-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-v2-ctv1-phase1_mix_0812_v3-pack-4ep-4acc-loss_scale-5e-5-32768-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/30b-p2-swift-v2-phase2_code_mix_0812-pack-3ep-4acc-granite_fusion-5e-5-32768-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/30b-p2-swift-v2-phase2_code_mix_0812-pack-3ep-4acc-granite_fusion-5e-5-32768-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -20,10 +20,10 @@
 #### Variables
 PER_DEVICE_TRAIN_BATCH_SIZE=2
 GRADIENT_ACCUMULATION_STEPS=8 #2 # has to be 2 for 30b, 1 for 120b
-#SEQLEN=16384
+#SEQLEN=32768
 #SEQLEN=40960
 #SEQLEN=24576
-SEQLEN=32768
+SEQLEN=16384
 #SEQLEN=4096
 #LR=9e-05
 LR=5e-06
@@ -39,8 +39,8 @@ timestamp=$(date +"%Y%m%d_%H%M%S")
 ID="e4_${WARMUP_RATIO}_${LR_SCHEDULE_TYPE}-clipping_${CLIP}"
 
 MODEL_BASE_PATH=/mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/edited
-NAME=7b-p4-lc-128k
-SHORT_NAME=7b-p4-lc-128k
+NAME=30b-lc-128k-2
+SHORT_NAME=30b-lc-128k-2
 
 #MODEL_BASE_PATH=/mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/30b-p3-v1/transformers_compatible
 #NAME=global_step92500
@@ -159,15 +159,22 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/lc-ckpts/7b-p4-lc-128k/hf \
+LR=5e-5
+EPOCHS=3
+LOSS_SCALE=granite_fusion
+MODEL_BASE_PATH=/mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/30b-p1-ctv1-datasets-0812-pack-4ep-4acc-loss_scale-5e-5-32768
+OUTPUT_MODEL_PATH=/mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/30b-p2-swift-v2-phase2_code_mix_0812-pack-3ep-4acc-granite_fusion-5e-5-32768
+DATA_MIX_PATH=/mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0812/phase2_code_mix_0812.jsonl
+
+export SCRIPT_ARGS="--model ${MODEL_BASE_PATH} \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0812/phase1_mix_0812_v3.jsonl \
+    --dataset ${DATA_MIX_PATH} \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
-    --num_train_epochs 4 \
+    --num_train_epochs ${EPOCHS} \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --learning_rate 5e-5 \
+    --learning_rate ${LR} \
     --gradient_accumulation_steps 4 \
     --packing true \
     --eval_steps 100 \
@@ -179,10 +186,10 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/c
     --dataset_num_proc 32 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/7b-p4-lc-128k-swift-v2-ctv1-phase1_mix_0812_v3-pack-4ep-4acc-loss_scale-5e-5-32768 \
+    --output_dir  ${OUTPUT_MODEL_PATH} \
     --attn_impl flash_attn \
     --use_chat_template true \
-    --loss_scale granite \
+    --loss_scale ${LOSS_SCALE} \
     "
 
 #    --loss_scale granite \
@@ -198,3 +205,4 @@ echo "*********************** START ****************************" >> $LOG
 echo $CMD >> $LOG
 
 srun ${SRUN_ARGS} bash -c "${CMD}"
+

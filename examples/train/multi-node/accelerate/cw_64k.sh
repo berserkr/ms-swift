@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
 #SBATCH --nodes=16
-#SBATCH --job-name=7b-p4-lc-128k-swift-v2-ctv1-phase1_mix_0812_v3-pack-4ep-4acc-loss_scale-5e-5-32768
+#SBATCH --job-name=tiny-base-prerelease-greylock-swift-v2-ctv1-phase1_mix_0820_v6-pack-4ep-4acc-granite_fusion-5e-5-65536
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-v2-ctv1-phase1_mix_0812_v3-pack-4ep-4acc-loss_scale-5e-5-32768-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/7b-p4-lc-128k-swift-v2-ctv1-phase1_mix_0812_v3-pack-4ep-4acc-loss_scale-5e-5-32768-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v2-ctv1-phase1_mix_0820_v6-pack-4ep-4acc-granite_fusion-5e-5-65536-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v2-ctv1-phase1_mix_0820_v6-pack-4ep-4acc-granite_fusion-5e-5-65536-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -22,8 +22,9 @@ PER_DEVICE_TRAIN_BATCH_SIZE=2
 GRADIENT_ACCUMULATION_STEPS=8 #2 # has to be 2 for 30b, 1 for 120b
 #SEQLEN=16384
 #SEQLEN=40960
-#SEQLEN=24576
-SEQLEN=32768
+#SEQLEN=32768
+SEQLEN=65536
+#SEQLEN=131072
 #SEQLEN=4096
 #LR=9e-05
 LR=5e-06
@@ -80,7 +81,7 @@ PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
 #container_image="/mnt/vast/squash/open-instruct-g4-tf4520.sqsh"
 
 container_mounts="/mnt:/mnt"
-container_image="/mnt/vast/squash/swift_v2.sqsh"
+container_image="/mnt/vast/squash/swift_v2_scattermoe.sqsh"
 LOG=/mnt/vast/proj/checkpoints/bathen/logs/${SHORT_NAME}_${SLURM_JOBID}.log
 
 # from MLPerf team -- need top review 
@@ -159,9 +160,9 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/lc-ckpts/7b-p4-lc-128k/hf \
+export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-tiny-base-prerelease-greylock-hf-final \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0812/phase1_mix_0812_v3.jsonl \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0820/phase1_mix_0820_v6.jsonl \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
     --num_train_epochs 4 \
@@ -170,20 +171,22 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/c
     --learning_rate 5e-5 \
     --gradient_accumulation_steps 4 \
     --packing true \
+    --packing_cache /mnt/vast/proj/checkpoints/bathen/cache \
     --eval_steps 100 \
     --save_steps 100 \
     --logging_steps 1 \
-    --max_length 32768 \
+    --max_length 65536 \
     --warmup_ratio 0.05 \
-    --dataloader_num_workers 32 \
-    --dataset_num_proc 32 \
+    --dataloader_num_workers 64 \
+    --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/7b-p4-lc-128k-swift-v2-ctv1-phase1_mix_0812_v3-pack-4ep-4acc-loss_scale-5e-5-32768 \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v2-ctv1-phase1_mix_0820_v6-pack-4ep-4acc-granite_fusion-5e-5-65536 \
     --attn_impl flash_attn \
     --use_chat_template true \
-    --loss_scale granite \
+    --loss_scale granite_fusion \
     "
+
 
 #    --loss_scale granite \
 echo $SCRIPT_ARGS >> $LOG
