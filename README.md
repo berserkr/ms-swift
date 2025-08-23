@@ -51,7 +51,7 @@ You can contact us and communicate with us by adding our group:
 
 
 ## 📝 Introduction
-🍲 ms-swift is an official framework provided by the ModelScope community for fine-tuning and deploying large language models and multi-modal large models. It currently supports the training (pre-training, fine-tuning, human alignment), inference, evaluation, quantization, and deployment of 500+ large models and 200+ multi-modal large models. These large language models (LLMs) include models such as Qwen3, Qwen3-MoE, Qwen2.5, InternLM3, GLM4, Mistral, DeepSeek-R1, Yi1.5, TeleChat2, Baichuan2, and Gemma2. The multi-modal LLMs include models such as Qwen2.5-VL, Qwen2-Audio, Llama4, Llava, InternVL3, MiniCPM-V-2.6, GLM4v, Xcomposer2.5, Yi-VL, DeepSeek-VL2, Phi3.5-Vision, and GOT-OCR2.
+🍲 ms-swift is an official framework provided by the ModelScope community for fine-tuning and deploying large language models and multi-modal large models. It currently supports the training (pre-training, fine-tuning, human alignment), inference, evaluation, quantization, and deployment of 500+ large models and 200+ multi-modal large models. These large language models (LLMs) include models such as Qwen3, Qwen3-MoE, Qwen2.5, InternLM3, GLM4.5, Mistral, DeepSeek-R1, Yi1.5, TeleChat2, Baichuan2, and Gemma2. The multi-modal LLMs include models such as Qwen2.5-VL, Qwen2-Audio, Llama4, Llava, InternVL3, MiniCPM-V-4, Ovis2.5, GLM4v, Xcomposer2.5, Yi-VL, DeepSeek-VL2, Phi3.5-Vision, and GOT-OCR2.
 
 🍔 Additionally, ms-swift incorporates the latest training technologies, including lightweight techniques such as LoRA, QLoRA, Llama-Pro, LongLoRA, GaLore, Q-GaLore, LoRA+, LISA, DoRA, FourierFt, ReFT, UnSloth, and Liger, as well as human alignment training methods like DPO, GRPO, RM, PPO, GKD, KTO, CPO, SimPO, and ORPO. ms-swift supports acceleration of inference, evaluation, and deployment modules using vLLM, SGLang and LMDeploy, and it supports model quantization with technologies like GPTQ, AWQ, and BNB. Furthermore, ms-swift offers a Gradio-based Web UI and a wealth of best practices.
 
@@ -75,6 +75,7 @@ You can contact us and communicate with us by adding our group:
 
 
 ## 🎉 News
+- 🎁 2025.08.12: Support [Dynamic Fine-Tuning](https://arxiv.org/abs/2508.05629)(DFT) in SFT training, use parameter `--enable_dft_loss true`. Training scripts can be found [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/full/dft.sh).
 - 🎁 2025.07.12: Deployment(pt/vLLM/SGLang) of Embedding models is supported, check [here](examples/deploy/embedding/client.py).
 - 🎁 2025.07.09: Megatron-SWIFT supports LoRA training. Compared to ms-swift, it achieves significant speedup on MoE models. Training scripts can be found [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/megatron/lora).
 - 🎁 2025.06.23: Fine-tuning of reranker models is supported. Training scripts can be found here: [Reranker](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/train_reranker.sh).
@@ -118,20 +119,22 @@ pip install -e .
 
 Running Environment:
 
-|              | Range        | Recommended | Notes                                     |
-| ------------ |--------------| ----------- | ----------------------------------------- |
-| python       | >=3.9        | 3.10        |                                           |
-| cuda         |              | cuda12      | No need to install if using CPU, NPU, MPS |
-| torch        | >=2.0        |             |                                           |
-| transformers | >=4.33       | 4.51.3      |                                           |
-| modelscope   | >=1.23       |             |                                           |
-| peft | >=0.11,<0.16 | ||
-| trl | >=0.13,<0.19 | 0.18 |RLHF|
-| deepspeed    | >=0.14       | 0.16.9 | Training                                  |
-| vllm         | >=0.5.1      | 0.8.5.post1       | Inference/Deployment/Evaluation           |
-| sglang |     | 0.4.6.post5 | Inference/Deployment/Evaluation |
-| lmdeploy     | >=0.5,<0.9        | 0.8       | Inference/Deployment/Evaluation           |
-| evalscope | >=0.11       |  | Evaluation |
+|              | Range        | Recommended         | Notes                                     |
+|--------------|--------------|---------------------|-------------------------------------------|
+| python       | >=3.9        | 3.10                |                                           |
+| cuda         |              | cuda12              | No need to install if using CPU, NPU, MPS |
+| torch        | >=2.0        | 2.7.1               |                                           |
+| transformers | >=4.33       | 4.54.1              |                                           |
+| modelscope   | >=1.23       |                     |                                           |
+| peft         | >=0.11,<0.18 |                     |                                           |
+| flash_attn   |              | 2.7.4.post1/3.0.0b1 |                                           |
+| trl          | >=0.15,<0.21 | 0.20.0              | RLHF                                      |
+| deepspeed    | >=0.14       | 0.16.9              | Training                                  |
+| vllm         | >=0.5.1      | 0.10                | Inference/Deployment                      |
+| sglang       | >=0.4.6      | 0.4.9.post6         | Inference/Deployment                      |
+| lmdeploy     | >=0.5   | 0.9.2                 | Inference/Deployment                      |
+| evalscope    | >=0.11       |                     | Evaluation                                |
+| gradio       |              | 5.32.1              | Web-UI/App                                |
 
 For more optional dependencies, you can refer to [here](https://github.com/modelscope/ms-swift/blob/main/requirements/install_all.sh).
 
@@ -200,7 +203,7 @@ swift infer \
     --stream true \
     --merge_lora true \
     --infer_backend vllm \
-    --max_model_len 8192 \
+    --vllm_max_model_len 8192 \
     --temperature 0 \
     --max_new_tokens 2048
 ```

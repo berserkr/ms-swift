@@ -142,10 +142,12 @@ Grounded Operation: CLICK(box=[[346,574,424,710]], element_type='卡片', elemen
 
 
 def test_minicpmv():
-    pt_engine = PtEngine('OpenBMB/MiniCPM-V-2_6')
-    _infer_model(pt_engine)
-    pt_engine.default_template.template_backend = 'jinja'
-    _infer_model(pt_engine)
+    # pt_engine = PtEngine('OpenBMB/MiniCPM-V-2_6')
+    messages = [{'role': 'user', 'content': '<image>descibe the picture?'}]
+    pt_engine = PtEngine('OpenBMB/MiniCPM-V-4')
+    response = _infer_model(pt_engine, messages=messages)
+    assert response[:100] == ('The image features a close-up of a kitten with a soft and fluffy appearance. '
+                              'The kitten has a striki')
 
 
 def test_minicpmo():
@@ -217,13 +219,14 @@ def test_florence():
     pt_engine = PtEngine('AI-ModelScope/Florence-2-base-ft')
     _infer_model(pt_engine, messages=[{'role': 'user', 'content': 'who are you?'}], images=[])
 
-    _infer_model(
+    response = _infer_model(
         pt_engine,
         messages=[{
             'role': 'user',
             'content': '<OD>'
         }],
         images=['http://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/animal.png'])
+    print(f'response: {response}')
 
 
 def test_phi3_vision():
@@ -319,6 +322,14 @@ def test_ovis2():
     assert response[:200] == ('The image features a close-up portrait of a young kitten with striking blue eyes. '
                               'The kitten has a distinctive coat pattern with a mix of gray, black, and white fur, '
                               'typical of a tabby pattern. Its ea')
+
+
+def test_ovis2_5():
+    pt_engine = PtEngine('AIDC-AI/Ovis2.5-2B')  # with flash_attn
+    response = _infer_model(pt_engine, messages=[{'role': 'user', 'content': 'Describe the image.'}])
+    assert response[:100] == ('<think>\n用户现在需要描述这张图片。首先看主体是一只小猫，风格是卡通或艺术化处理，'
+                              '毛发有模糊效果，显得柔和。颜色方面，小猫的毛色是灰白相间，有深色条纹，耳朵内侧粉色，'
+                              '眼睛大而圆，蓝色，瞳孔黑色，')
 
 
 def test_paligemma():
@@ -598,6 +609,41 @@ def test_keye_vl():
         'http://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/cat.png',
         'http://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/animal.png'
     ]
+    pt_engine.default_template.template_backend = 'swift'
+    response = _infer_model(pt_engine, messages=messages, images=images)
+    pt_engine.default_template.template_backend = 'jinja'
+    response2 = _infer_model(pt_engine, messages=messages, images=images)
+    assert response == response2
+
+
+def test_dots_ocr():
+    # https://github.com/modelscope/ms-swift/issues/2122
+    pt_engine = PtEngine('rednote-hilab/dots.ocr')
+    messages = [{'role': 'user', 'content': '<image>Extract the text content from this image.'}]
+    images = ['https://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/ocr.png']
+    response = _infer_model(pt_engine, messages=messages, images=images)
+    pt_engine.default_template.template_backend = 'jinja'
+    response2 = _infer_model(pt_engine, messages=messages, images=images)
+    assert response == response2
+
+
+def test_glm4_5v():
+    messages = [{'role': 'user', 'content': '<image><image>What is the difference between the two images?'}]
+    images = [
+        'http://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/cat.png',
+        'http://modelscope-open.oss-cn-hangzhou.aliyuncs.com/images/animal.png'
+    ]
+    pt_engine = PtEngine('ZhipuAI/GLM-4.5V')
+    response = _infer_model(pt_engine, messages=messages, images=images)
+    pt_engine.default_template.template_backend = 'jinja'
+    response2 = _infer_model(pt_engine, messages=messages, images=images)
+    assert response == response2
+
+
+def test_interns1():
+    pt_engine = PtEngine('Shanghai_AI_Laboratory/Intern-S1-mini')
+    images = ['http://images.cocodataset.org/val2017/000000039769.jpg']
+    messages = [{'role': 'user', 'content': 'Please describe the image explicitly.'}]
     response = _infer_model(pt_engine, messages=messages, images=images)
     pt_engine.default_template.template_backend = 'jinja'
     response2 = _infer_model(pt_engine, messages=messages, images=images)
@@ -618,6 +664,7 @@ if __name__ == '__main__':
     # test_ovis1_6()
     # test_ovis1_6_llama3()
     # test_ovis2()
+    # test_ovis2_5()
     # test_yi_vl()
     # test_deepseek_vl()
     # test_deepseek_janus()
@@ -660,4 +707,7 @@ if __name__ == '__main__':
     # test_kimi_vl_thinking()
     # test_glm4_1v()
     # test_gemma3n()
-    test_keye_vl()
+    # test_keye_vl()
+    # test_dots_ocr()
+    # test_glm4_5v()
+    test_interns1()

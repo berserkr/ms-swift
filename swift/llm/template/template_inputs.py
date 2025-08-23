@@ -112,8 +112,11 @@ class StdTemplateInputs:
     audios: List[str] = field(default_factory=list)
     videos: List[str] = field(default_factory=list)
     objects: Dict[str, List[Any]] = field(default_factory=dict)
+    rejected_images: List[Union[str, Image.Image]] = field(default_factory=list)
 
     margin: Optional[float] = None  # for reward modeling
+    mm_processor_kwargs: Dict[str, Any] = field(default_factory=dict)
+    extra_kwargs: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         self.image_idx = 0
@@ -127,6 +130,8 @@ class StdTemplateInputs:
             self.videos = [self.videos]
         if self.audios and not isinstance(self.audios, (list, tuple)):
             self.audios = [self.audios]
+        if self.rejected_images and not isinstance(self.rejected_images, (list, tuple)):
+            self.rejected_images = [self.rejected_images]
 
     def to_history(self):
         if not self.messages:
@@ -138,7 +143,7 @@ class StdTemplateInputs:
         return bool(self.images or self.audios or self.videos or self.objects)
 
     @classmethod
-    def from_dict(cls, inputs: Dict[str, Any]) -> Tuple['StdTemplateInputs', Dict[str, Any]]:
+    def from_dict(cls, inputs: Dict[str, Any]) -> 'StdTemplateInputs':
         kwargs = {}
         for key in ['rejected_response', 'label', 'channel', 'margin']:
             if key in inputs:
@@ -176,14 +181,24 @@ class StdTemplateInputs:
         all_keys = set(f.name for f in fields(StdTemplateInputs))
         extra_kwargs = {k: v for k, v in inputs.items() if k not in all_keys}
         return cls(
-            messages=messages, system=system, tools=tools, documents=documents, objects=objects, **kwargs, **media_kwargs), extra_kwargs
+            messages=messages,
+            system=system,
+            tools=tools,
+            documents=documents, 
+            objects=objects,
+            extra_kwargs=extra_kwargs,
+            **kwargs,
+            **media_kwargs)
 
     @staticmethod
     def remove_messages_media(messages: Messages) -> Dict[str, Any]:
-        res = {'images': [], 'audios': [], 'videos': []}
+        res = {'images': [], 'audios': [], 'videos': [], 'rejected_images': []}
         for message in messages:
             content = message['content']
             if isinstance(content, str):
+                continue
+            elif (isinstance(content, list) and content
+                  and isinstance(content[0], int)) or (isinstance(content, dict) and 'token_ids' in content):
                 continue
             # List[Dict[str, Any]]
             new_content = ''

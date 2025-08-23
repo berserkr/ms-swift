@@ -33,18 +33,34 @@ class MultiTurnScheduler(ABC):
         self.max_turns = max_turns
 
     @abstractmethod
-    def step(self, infer_request: RolloutInferRequest, result: RolloutResponseChoice, current_turn: int) -> RolloutInferRequest:
+    def step(self, infer_request: 'RolloutInferRequest', result: 'RolloutResponseChoice',
+             current_turn: int) -> Union['RolloutInferRequest', Tuple['RolloutInferRequest', Dict]]:
         pass
 
-    def check_finished(self, infer_request: RolloutInferRequest, result: RolloutResponseChoice, current_turn: int) -> bool:
+    def check_finished(self, infer_request: 'RolloutInferRequest', result: 'RolloutResponseChoice',
+                       current_turn: int) -> bool:
         if result.finish_reason == 'length':
             return True
-
         if self.max_turns and current_turn >= self.max_turns:
             return True
-
         return False
 ```
+
+> If you want the reward function to access information from multi-turn interactions, please return an extra dict object in the `step` method. In the reward function, you can then access `multi_turn_infos` from `kwargs`.
+
+```python
+class Scheduler():
+    def step(self, infer_request: 'RolloutInferRequest', result: 'RolloutResponseChoice',
+             current_turn: int) -> Union['RolloutInferRequest', Tuple['RolloutInferRequest', Dict]]:
+        ...
+        return infer_request, extra_dict
+
+class RewardFunction():
+    def __call__(self, completions, **kwargs):
+        infos = kwargs.get('multi_turn_infos', {})
+        ...
+```
+
 
 The `step` and `check_finished` methods accept the following parameters:
 
@@ -99,7 +115,8 @@ It is recommended to use AsyncEngine for efficient batch data asynchronous multi
 <img src="https://raw.githubusercontent.com/modelscope/ms-swift/main/docs/resources/asyncengine.png" width="400" />
 
 Use the `use_async_engine` parameter in the `rollout` command to specify the engine type:
-```
+```bash
+CUDA_VISIBLE_DEVICES=0 \
 swift rollout \
     --model xxx \
     --use_async_engine true \
