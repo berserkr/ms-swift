@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
-#SBATCH --nodes=32
+#SBATCH --nodes=64
 #SBATCH --job-name=30b-lc-128k-2-swift-v2-ctv1-phase1_mix_0820_v4-pack-4ep-4acc-granite_fusion-5e-5-65536
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4

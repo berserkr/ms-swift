@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
-#SBATCH --nodes=16
-#SBATCH --job-name=tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536
+#SBATCH --nodes=12
+#SBATCH --job-name=granite-4.0-3b-base-prerelease-killington-swift-v2-scatter-12n-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-4096
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-swift-v2-scatter-12n-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-4096-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-swift-v2-scatter-12n-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-4096-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -23,9 +23,9 @@ GRADIENT_ACCUMULATION_STEPS=8 #2 # has to be 2 for 30b, 1 for 120b
 #SEQLEN=16384
 #SEQLEN=40960
 #SEQLEN=32768
-SEQLEN=65536
+SEQLEN=4096
 #SEQLEN=131072
-#SEQLEN=4096
+#SEQLEN=65536
 #LR=9e-05
 LR=5e-06
 CLIP=1.0
@@ -160,7 +160,7 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-tiny-base-prerelease-greylock-hf-final \
+export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-3b-base-prerelease-killington-r250814a \
     --train_type full \
     --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0820/phase1_mix_0820_v7.jsonl \
     --torch_dtype bfloat16 \
@@ -175,17 +175,16 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granit
     --eval_steps 100 \
     --save_steps 100 \
     --logging_steps 1 \
-    --max_length 65536 \
+    --max_length 4096 \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 64 \
     --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536 \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-swift-v2-scatter-12n-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-4096 \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite_fusion \
-    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536/v0-20250825-042840/checkpoint-2500 \
     "
 
 

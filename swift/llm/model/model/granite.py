@@ -62,9 +62,9 @@ register_model(
     ModelMeta(
         LLMModelType.granite,
         [
-            # qwen
+            # granite
             ModelGroup([
-                # chat
+                # moe
                 Model('IBM/granite-4-tiny', 'IBM/granite-4-tiny'),
                 Model('IBM/granite-4-small', 'IBM/granite-4-small'),
                 Model('IBM/granite-4-medium', 'IBM/granite-4-medium'),
@@ -74,3 +74,18 @@ register_model(
         get_model_tokenizer_granite,
         architectures=['GraniteMoeHybridForCausalLM'],
         model_arch=ModelArch.granite))
+
+register_model(
+    ModelMeta(
+        LLMModelType.granite_dense,
+        [
+            # granite
+            ModelGroup([
+                # dense
+                Model('IBM/granite-4-3b', 'IBM/granite-4-3b'),
+            ]),
+        ],
+        TemplateType.granite,
+        get_model_tokenizer_granite,
+        architectures=['GraniteForCausalLM'],
+        model_arch=ModelArch.granite_dense))
