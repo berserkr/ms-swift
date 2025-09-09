@@ -49,7 +49,7 @@
 <img src="asset/discord_qr.jpg" width="200" height="200">  |  <img src="asset/wechat.png" width="200" height="200">
 
 ## 📝 简介
-🍲 ms-swift是魔搭社区提供的大模型与多模态大模型微调部署框架，现已支持500+大模型与200+多模态大模型的训练（预训练、微调、人类对齐）、推理、评测、量化与部署。其中大模型包括：Qwen3、Qwen3-MoE、Qwen2.5、InternLM3、GLM4、Mistral、DeepSeek-R1、Yi1.5、TeleChat2、Baichuan2、Gemma2等模型，多模态大模型包括：Qwen2.5-VL、Qwen2-Audio、Llama4、Llava、InternVL3、MiniCPM-V-2.6、GLM4v、Xcomposer2.5、Yi-VL、DeepSeek-VL2、Phi3.5-Vision、GOT-OCR2等模型。
+🍲 ms-swift是魔搭社区提供的大模型与多模态大模型微调部署框架，现已支持500+大模型与200+多模态大模型的训练（预训练、微调、人类对齐）、推理、评测、量化与部署。其中大模型包括：Qwen3、Qwen3-MoE、Qwen2.5、InternLM3、GLM4.5、Mistral、DeepSeek-R1、Yi1.5、TeleChat2、Baichuan2、Gemma2等模型，多模态大模型包括：Qwen2.5-VL、Qwen2-Audio、Llama4、Llava、InternVL3、MiniCPM-V-4、Ovis2.5、GLM4v、Xcomposer2.5、Yi-VL、DeepSeek-VL2、Phi3.5-Vision、GOT-OCR2等模型。
 
 🍔 除此之外，ms-swift汇集了最新的训练技术，包括LoRA、QLoRA、Llama-Pro、LongLoRA、GaLore、Q-GaLore、LoRA+、LISA、DoRA、FourierFt、ReFT、UnSloth、和Liger等轻量化训练技术，以及DPO、GRPO、RM、PPO、GKD、KTO、CPO、SimPO、ORPO等人类对齐训练方法。ms-swift支持使用vLLM、SGLang和LMDeploy对推理、评测和部署模块进行加速，并支持使用GPTQ、AWQ、BNB等技术对大模型进行量化。ms-swift还提供了基于Gradio的Web-UI界面及丰富的最佳实践。
 
@@ -71,6 +71,7 @@
 - **模型量化**：支持AWQ、GPTQ、FP8和BNB的量化导出，导出的模型支持使用vLLM/SGLang/LmDeploy推理加速，并支持继续训练。
 
 ## 🎉 新闻
+- 🎁 2025.08.12: 支持在SFT训练中使用[Dynamic Fine-Tuning](https://arxiv.org/abs/2508.05629)(DFT)，使用参数 `--enable_dft_loss true`。训练脚本参考[这里](https://github.com/modelscope/ms-swift/blob/main/examples/train/full/dft.sh)
 - 🎁 2025.07.12: 支持部署Embedding模型的部署(pt/vLLM/SGLang), 查看[这里](examples/deploy/embedding/client.py).
 - 🎁 2025.07.09: Megatron-SWIFT支持LoRA训练。相比ms-swift，在MoE模型提速显著。训练脚本参考[这里](https://github.com/modelscope/ms-swift/blob/main/examples/train/megatron/lora)。
 - 🎁 2025.06.23: 支持Reranker模型训练，训练脚本参考[这里](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/train_reranker.sh)。
@@ -114,20 +115,22 @@ pip install -e .
 
 运行环境：
 
-|        | 范围           | 推荐 | 备注 |
-| ------ |--------------| ---- | --|
-| python | >=3.9        | 3.10 ||
-| cuda |              | cuda12 |使用cpu、npu、mps则无需安装|
-| torch | >=2.0        |  ||
-| transformers | >=4.33       | 4.51.3 ||
-| modelscope | >=1.23       |  ||
-| peft | >=0.11,<0.16 | ||
-| trl | >=0.13,<0.19 | 0.18 |RLHF|
-| deepspeed | >=0.14       | 0.16.9 |训练|
-| vllm | >=0.5.1      | 0.8.5.post1 |推理/部署/评测|
-| sglang |     | 0.4.6.post5 |推理/部署/评测|
-| lmdeploy | >=0.5,<0.9      | 0.8 |推理/部署/评测|
-| evalscope | >=0.11       | |评测|
+|              | 范围           | 推荐                  | 备注                 |
+|--------------|--------------|---------------------|--------------------|
+| python       | >=3.9        | 3.10                |                    |
+| cuda         |              | cuda12              | 使用cpu、npu、mps则无需安装 |
+| torch        | >=2.0        | 2.7.1               |                    |
+| transformers | >=4.33       | 4.54.1              |                    |
+| modelscope   | >=1.23       |                     |                    |
+| peft         | >=0.11,<0.18 |                     |                    |
+| flash_attn   |              | 2.7.4.post1/3.0.0b1 |                    |
+| trl          | >=0.15,<0.21 | 0.20.0              | RLHF               |
+| deepspeed    | >=0.14       | 0.16.9              | 训练                 |
+| vllm         | >=0.5.1      | 0.10                | 推理/部署              |
+| sglang       | >=0.4.6      | 0.4.9.post6         | 推理/部署              |
+| lmdeploy     | >=0.5   | 0.9.2                 | 推理/部署              |
+| evalscope    | >=0.11       |                     | 评测                 |
+| gradio       |              | 5.32.1              | Web-UI/App         |
 
 更多可选依赖可以参考[这里](https://github.com/modelscope/ms-swift/blob/main/requirements/install_all.sh)。
 
@@ -193,7 +196,7 @@ swift infer \
     --stream true \
     --merge_lora true \
     --infer_backend vllm \
-    --max_model_len 8192 \
+    --vllm_max_model_len 8192 \
     --temperature 0 \
     --max_new_tokens 2048
 ```

@@ -63,6 +63,8 @@ class RequestConfig:
     presence_penalty: float = 0.
     frequency_penalty: float = 0.
     length_penalty: float = 1.
+    # Return token_ids additionally (non-stream)
+    return_details: bool = False
 
     def __post_init__(self):
         if self.stop is None:
@@ -263,6 +265,7 @@ class ChatMessage:
     role: Literal['system', 'user', 'assistant']
     content: Union[str, List[Dict[str, Any]], int, float]
     tool_calls: Optional[List[ChatCompletionMessageToolCall]] = None
+    reasoning_content: Optional[str] = None
 
 
 @dataclass
@@ -271,6 +274,7 @@ class ChatCompletionResponseChoice:
     message: ChatMessage
     finish_reason: Literal['stop', 'length', None]
     logprobs: Optional[Dict[str, List[Dict[str, Any]]]] = None
+    token_ids: Optional[List[int]] = None
 
     def to_cmpl_choice(self) -> 'CompletionResponseChoice':
         self = deepcopy(self)
@@ -298,6 +302,16 @@ class EmbeddingResponse:
 @dataclass
 class RolloutResponseChoice(ChatCompletionResponseChoice):
     messages: Optional[Messages] = None
+    images: Optional[List[str]] = None
+    multi_turn_infos: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class GymRolloutResponseChoice(RolloutResponseChoice):
+    trajectory_id: str = None
+    total_reward: float = 0.0
+    step_rewards: List[float] = None
+    trajectory_info: List[Dict[str, Any]] = None
 
 
 @dataclass
@@ -311,11 +325,13 @@ class CompletionResponseChoice:
 @dataclass
 class ChatCompletionResponse:
     model: str
-    choices: List[Union[ChatCompletionResponseChoice, RolloutResponseChoice]]
+    choices: List[Union[ChatCompletionResponseChoice, RolloutResponseChoice, GymRolloutResponseChoice]]
     usage: UsageInfo
     id: str = field(default_factory=lambda: f'chatcmpl-{random_uuid()}')
     object: str = 'chat.completion'
     created: int = field(default_factory=lambda: int(time.time()))
+    prompt_token_ids: Optional[List[int]] = None
+    images_size: Optional[List[Tuple[int, int]]] = None
 
     def to_cmpl_response(self) -> 'CompletionResponse':
         self = deepcopy(self)
@@ -339,6 +355,7 @@ class DeltaMessage:
     role: Literal['system', 'user', 'assistant', None] = None
     content: Optional[str] = None
     tool_calls: Optional[List[ChatCompletionMessageToolCall]] = None
+    reasoning_content: Optional[str] = None
 
 
 @dataclass
@@ -392,6 +409,7 @@ class InitCommunicatorRequest(BaseModel):
     host: str
     port: int
     world_size: int
+    client_device_uuid: Optional[str] = None
 
 
 class UpdateWeightsRequest(BaseModel):

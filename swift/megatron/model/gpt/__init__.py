@@ -35,8 +35,10 @@ register_megatron_model(
         ModelType.ziya,
         ModelType.mengzi3,
         ModelType.qwen3,
+        ModelType.qwen3_thinking,
         ModelType.qwen2_moe,
         ModelType.qwen3_moe,
+        ModelType.qwen3_moe_thinking,
         ModelType.internlm3,
         ModelType.mimo,
         ModelType.mimo_rl,
@@ -47,4 +49,6 @@ register_megatron_model(
         ModelType.deepseek_r1,
         ModelType.dots1,
         ModelType.ernie,
+        ModelType.glm4_5,
+        ModelType.deepseek_v3_1,
     ], model_provider, convert_gpt_hf_config, convert_mcore2hf, convert_hf2mcore))

@@ -14,7 +14,7 @@ swift infer \
     --infer_backend vllm \
     --stream true \
     --max_new_tokens 2048 \
-    --max_model_len 8192
+    --vllm_max_model_len 8192
 ```
 
 ```text
@@ -42,7 +42,7 @@ swift infer \
     --infer_backend vllm \
     --stream true \
     --max_new_tokens 2048 \
-    --max_model_len 8192 \
+    --vllm_max_model_len 8192 \
     --response_prefix '<think>\n\n</think>\n\n'
 ```
 
@@ -119,9 +119,9 @@ swift infer \
     --model Qwen/Qwen3-32B \
     --infer_backend vllm \
     --val_dataset 'AI-ModelScope/alpaca-gpt4-data-en#5000' 'AI-ModelScope/alpaca-gpt4-data-zh#5000' \
-    --gpu_memory_utilization 0.9 \
-    --tensor_parallel_size 2 \
-    --max_model_len 8192 \
+    --vllm_gpu_memory_utilization 0.9 \
+    --vllm_tensor_parallel_size 2 \
+    --vllm_max_model_len 8192 \
     --max_new_tokens 4096 \
     --write_batch_size 1000 \
     --result_path distill_dataset.jsonl
@@ -314,7 +314,7 @@ swift rlhf \
     --offload_model true \
     --offload_optimizer true \
     --deepspeed zero3 \
-    --tensor_parallel_size 1 \
+    --vllm_tensor_parallel_size 1 \
     --temperature 1.0 \
     --top_p 0.85 \
     --log_completions true \
@@ -322,6 +322,8 @@ swift rlhf \
 ```
 
 ## Megatron-SWIFT
+
+Qwen3-235B-A22B-Instruct-250718 单机8卡H20 LoRA训练的最佳实践参考：[https://github.com/modelscope/ms-swift/pull/5033](https://github.com/modelscope/ms-swift/pull/5033)。
 
 ms-swift 引入了 Megatron 并行技术以加速大模型的CPT/SFT/DPO。支持的模型可以在[支持的模型文档](../Instruction/支持的模型和数据集.md)中找到。
 
@@ -331,7 +333,6 @@ ms-swift 引入了 Megatron 并行技术以加速大模型的CPT/SFT/DPO。支�
 
 ```bash
 # https://help.aliyun.com/zh/pai/user-guide/general-environment-variables
-# 请确保两个节点上的权重保存路径`--save`和packing缓存路径`--packing_cache`相同且共享。
 PYTORCH_CUDA_ALLOC_CONF='expandable_segments:True' \
 NNODES=$WORLD_SIZE \
 NODE_RANK=$RANK \
@@ -343,7 +344,8 @@ megatron sft \
     --expert_model_parallel_size 8 \
     --moe_grouped_gemm true \
     --moe_shared_expert_overlap true \
-    --moe_aux_loss_coeff 0.01 \
+    --moe_permute_fusion true \
+    --moe_aux_loss_coeff 1e-3 \
     --micro_batch_size 1 \
     --global_batch_size 16 \
     --packing true \
