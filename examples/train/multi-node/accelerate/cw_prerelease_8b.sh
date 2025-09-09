@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
-#SBATCH --nodes=16
-#SBATCH --job-name=tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536
+#SBATCH --nodes=32
+#SBATCH --job-name=granite-3.3-8b-phase1_mix_0825_v2_50k-pack-4ep-4acc-granite_fusion-5e-5-32768-hybridclass
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-3.3-8b-phase1_mix_0825_v2_50k-pack-4ep-4acc-granite_fusion-5e-5-32768-hybridclass-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-3.3-8b-phase1_mix_0825_v2_50k-pack-4ep-4acc-granite_fusion-5e-5-32768-hybridclass-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -20,10 +20,10 @@
 #### Variables
 PER_DEVICE_TRAIN_BATCH_SIZE=2
 GRADIENT_ACCUMULATION_STEPS=8 #2 # has to be 2 for 30b, 1 for 120b
-#SEQLEN=16384
-#SEQLEN=40960
 #SEQLEN=32768
-SEQLEN=65536
+#SEQLEN=32768
+#SEQLEN=40960
+SEQLEN=32768
 #SEQLEN=131072
 #SEQLEN=4096
 #LR=9e-05
@@ -81,7 +81,8 @@ PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
 #container_image="/mnt/vast/squash/open-instruct-g4-tf4520.sqsh"
 
 container_mounts="/mnt:/mnt"
-container_image="/mnt/vast/squash/swift_v2_scattermoe.sqsh"
+#container_image="/mnt/vast/squash/swift_v2_scattermoe.sqsh"
+container_image="/mnt/vast/squash/swift_v2_scattermoe_granite_kwargs.sqsh"
 LOG=/mnt/vast/proj/checkpoints/bathen/logs/${SHORT_NAME}_${SLURM_JOBID}.log
 
 # from MLPerf team -- need top review 
@@ -160,9 +161,9 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-tiny-base-prerelease-greylock-hf-final \
+export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-3.3-8b-base \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0820/phase1_mix_0820_v7.jsonl \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0825/phase1_mix_0825_v2_50k.jsonl \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
     --num_train_epochs 4 \
@@ -175,24 +176,25 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granit
     --eval_steps 100 \
     --save_steps 100 \
     --logging_steps 1 \
-    --max_length 65536 \
+    --max_length 32768 \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 64 \
     --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536 \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-3.3-8b-phase1_mix_0825_v2_50k-pack-4ep-4acc-granite_fusion-5e-5-32768-hybridclass \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite_fusion \
-    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536/v0-20250825-042840/checkpoint-2500 \
+    --use_liger_kernel true \
     "
-
-
+#    --use_liger_kernel true \
+#    --gradient_checkpointing false \
+#    --gradient_checkpointing_kwargs '{\"use_reentrant\": false}' 
 #    --loss_scale granite \
 echo $SCRIPT_ARGS >> $LOG
 
-CONFIG=examples/train/multi-node/accelerate/fsdp_accelerate.yaml
+CONFIG=examples/train/multi-node/accelerate/multi_node.yaml
 SCRIPT=swift/cli/sft.py
 
 echo "CUDA DEVICES: ${CUDA_VISIBLE_DEVICES}" >> $LOG

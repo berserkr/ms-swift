@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
 #SBATCH --nodes=16
-#SBATCH --job-name=tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536
+#SBATCH --job-name=tiny-base-prerelease-greylock-swift-v3-auxloss-phase1_mix_0820_v5-pack-4ep-4acc-granite_fusion-5e-5-65536
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v3-auxloss-phase1_mix_0820_v5-pack-4ep-4acc-granite_fusion-5e-5-65536-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v3-auxloss-phase1_mix_0820_v5-pack-4ep-4acc-granite_fusion-5e-5-65536-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -81,7 +81,7 @@ PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
 #container_image="/mnt/vast/squash/open-instruct-g4-tf4520.sqsh"
 
 container_mounts="/mnt:/mnt"
-container_image="/mnt/vast/squash/swift_v2_scattermoe.sqsh"
+container_image="/mnt/vast/squash/swift_v3.sqsh"
 LOG=/mnt/vast/proj/checkpoints/bathen/logs/${SHORT_NAME}_${SLURM_JOBID}.log
 
 # from MLPerf team -- need top review 
@@ -144,7 +144,7 @@ SRUN_ARGS="--kill-on-bad-exit=1  \
             --container-image=${container_image}  \
             --container-mounts=${container_mounts}  \
             --no-container-remap-root \
-            --container-workdir=/mnt/home/bathen/src/github.com/ms-swift
+            --container-workdir=/mnt/home/bathen/src/github.com/ms-swift-git
             "
 echo $SRUN_ARGS >> $LOG
 
@@ -160,9 +160,10 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
+export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache 
 export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-tiny-base-prerelease-greylock-hf-final \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0820/phase1_mix_0820_v7.jsonl \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0820/phase1_mix_0820_v7.jsonl  \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
     --num_train_epochs 4 \
@@ -171,7 +172,6 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granit
     --learning_rate 5e-5 \
     --gradient_accumulation_steps 4 \
     --packing true \
-    --packing_cache /mnt/vast/proj/checkpoints/bathen/cache \
     --eval_steps 100 \
     --save_steps 100 \
     --logging_steps 1 \
@@ -181,12 +181,13 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granit
     --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536 \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v3-auxloss-phase1_mix_0820_v5-pack-4ep-4acc-granite_fusion-5e-5-65536 \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite_fusion \
-    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536/v0-20250825-042840/checkpoint-2500 \
+    --router_aux_loss_coef 0.01 \
     "
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v3-auxloss-phase1_mix_0820_v5-pack-4ep-4acc-granite_fusion-5e-5-65536/v3-20250823-182227/checkpoint-5400 \
 
 
 #    --loss_scale granite \

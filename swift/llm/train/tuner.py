@@ -22,7 +22,8 @@ def apply_liger(model_type: str):
                                            apply_liger_kernel_to_mixtral, apply_liger_kernel_to_gemma,
                                            apply_liger_kernel_to_qwen2, apply_liger_kernel_to_qwen3,
                                            apply_liger_kernel_to_qwen2_vl, apply_liger_kernel_to_qwen2_5_vl,
-                                           apply_liger_kernel_to_phi3, apply_liger_kernel_to_mllama)
+                                           apply_liger_kernel_to_phi3, apply_liger_kernel_to_mllama,
+                                           apply_liger_kernel_to_granite)
     from swift.llm import ModelType
     if model_type in (ModelType.llama, ModelType.llama3, ModelType.llama3_1, ModelType.llama3_2):
         apply_liger_kernel_to_llama()
@@ -44,6 +45,8 @@ def apply_liger(model_type: str):
         apply_liger_kernel_to_qwen2_vl()
     elif model_type in (ModelType.qwen2_5_vl):
         apply_liger_kernel_to_qwen2_5_vl()
+    elif model_type in (ModelType.granite_dense, ModelType.granite):
+        apply_liger_kernel_to_granite()
     else:
         raise ValueError(f'Unsupported liger model_type: {model_type}')
 

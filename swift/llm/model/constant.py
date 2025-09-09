@@ -6,6 +6,7 @@ from typing import List
 
 class LLMModelType:
     granite = 'granite'
+    granite_dense = 'granite_dense'
     
     qwen = 'qwen'
     qwen2 = 'qwen2'

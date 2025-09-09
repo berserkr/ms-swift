@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
 #SBATCH --nodes=16
-#SBATCH --job-name=tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536
+#SBATCH --job-name=granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0825_v1-pack-4ep-4acc-granite-5e-5-32768-hybridclass
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0825_v1-pack-4ep-4acc-granite-5e-5-32768-hybridclass-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0825_v1-pack-4ep-4acc-granite-5e-5-32768-hybridclass-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -20,10 +20,10 @@
 #### Variables
 PER_DEVICE_TRAIN_BATCH_SIZE=2
 GRADIENT_ACCUMULATION_STEPS=8 #2 # has to be 2 for 30b, 1 for 120b
-#SEQLEN=16384
-#SEQLEN=40960
 #SEQLEN=32768
-SEQLEN=65536
+#SEQLEN=32768
+#SEQLEN=40960
+SEQLEN=32768
 #SEQLEN=131072
 #SEQLEN=4096
 #LR=9e-05
@@ -81,7 +81,8 @@ PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
 #container_image="/mnt/vast/squash/open-instruct-g4-tf4520.sqsh"
 
 container_mounts="/mnt:/mnt"
-container_image="/mnt/vast/squash/swift_v2_scattermoe.sqsh"
+#container_image="/mnt/vast/squash/swift_v2_scattermoe.sqsh"
+container_image="/mnt/vast/squash/swift_v2_scattermoe_granite_kwargs.sqsh"
 LOG=/mnt/vast/proj/checkpoints/bathen/logs/${SHORT_NAME}_${SLURM_JOBID}.log
 
 # from MLPerf team -- need top review 
@@ -115,7 +116,7 @@ export GPUS_PER_NODE=$(nvidia-smi -L | wc -l)
 export MASTER_ADDR="$(scontrol show hostnames "${SLURM_JOB_NODELIST-}" | head -n1)"
 export MASTER_PORT=28444
 export NNODES=$SLURM_NNODES
-#export NODE_RANK=$SLURM_NODEID
+export NODE_RANK=$SLURM_NODEID
 export WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 export JOB_ID=${SLURM_JOBID}
 
@@ -138,7 +139,10 @@ export TRITON_CACHE_DIR="${TRITON_HOME}/cache"
 # Log the assigned nodes
 echo "Using nodes: $SLURM_JOB_NODELIST" >> $LOG
 #save hostlist for replay / debug if needed 
-# echo $SLURM_JOB_NODELIST > $run_dir/hostfile-${SLURM_JOB_ID}.txt
+
+hostfile=/tmp/$USER/hostfile-${SLURM_JOB_ID}.txt
+echo $SLURM_JOB_NODELIST > $hostfile
+
 #setup some srun args 
 SRUN_ARGS="--kill-on-bad-exit=1  \
             --container-image=${container_image}  \
@@ -150,53 +154,50 @@ echo $SRUN_ARGS >> $LOG
 
 echo `date` : ${SLURM_JOBID} >> $LOG
 
-export DISTRIBUTED_ARGS="--mixed_precision bf16 \
-    --num_machines ${SLURM_JOB_NUM_NODES} \
-    --num_processes ${WORLD_SIZE} \
-    --machine_rank \$SLURM_NODEID \
-    --main_process_ip ${MASTER_ADDR} \
-    --main_process_port ${MASTER_PORT} \
-    --rdzv_backend c10d \
-    "
-echo $DISTRIBUTED_ARGS >> $LOG
+DISTRIBUTED_ARGS="--num_gpus=${GPUS_PER_NODE} \
+        --num_nodes ${NNODES} \
+        --node_rank=\$SLURM_NODEID \
+        --master_addr=${MASTER_ADDR} \
+        --master_port=${MASTER_PORT} \
+        --hostfile=${hostfile} \
+        --no_ssh \
+"
 
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-tiny-base-prerelease-greylock-hf-final \
-    --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0820/phase1_mix_0820_v7.jsonl \
-    --torch_dtype bfloat16 \
-    --split_dataset_ratio 0.01 \
-    --num_train_epochs 4 \
-    --per_device_train_batch_size 1 \
-    --per_device_eval_batch_size 1 \
-    --learning_rate 5e-5 \
-    --gradient_accumulation_steps 4 \
-    --packing true \
-    --packing_cache /mnt/vast/proj/checkpoints/bathen/cache \
-    --eval_steps 100 \
-    --save_steps 100 \
-    --logging_steps 1 \
-    --max_length 65536 \
-    --warmup_ratio 0.05 \
-    --dataloader_num_workers 64 \
-    --dataset_num_proc 64 \
-    --save_total_limit 5 \
-    --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536 \
-    --attn_impl flash_attn \
-    --use_chat_template true \
-    --loss_scale granite_fusion \
-    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/tiny-base-prerelease-greylock-swift-v2-scatter-phase1_mix_0820_v7-pack-4ep-4acc-granite_fusion-5e-5-65536/v0-20250825-042840/checkpoint-2500 \
-    "
+SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-3b-base-prerelease-killington-final \
+        --train_type full \
+        --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0825/phase1_mix_0825_v1.jsonl \
+        --torch_dtype bfloat16 \
+        --split_dataset_ratio 0.01 \
+        --num_train_epochs 4 \
+        --per_device_train_batch_size 1 \
+        --per_device_eval_batch_size 1 \
+        --learning_rate 5e-5 \
+        --gradient_accumulation_steps 4 \
+        --packing true \
+        --packing_cache /mnt/vast/proj/checkpoints/bathen/cache \
+        --eval_steps 100 \
+        --save_steps 100 \
+        --logging_steps 1 \
+        --max_length 32768 \
+        --warmup_ratio 0.05 \
+        --dataloader_num_workers 64 \
+        --dataset_num_proc 64 \
+        --save_total_limit 5 \
+        --save_only_model true \
+        --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0825_v1-pack-4ep-4acc-granite-5e-5-32768-ds \
+        --attn_impl flash_attn \
+        --use_chat_template true \
+        --loss_scale granite \
+        --use_liger_kernel true \
+"
 
+#        --gradient_checkpointing false \
 
-#    --loss_scale granite \
-echo $SCRIPT_ARGS >> $LOG
-
-CONFIG=examples/train/multi-node/accelerate/fsdp_accelerate.yaml
+CONFIG=examples/train/multi-node/accelerate/multi_node.yaml
 SCRIPT=swift/cli/sft.py
 
 echo "CUDA DEVICES: ${CUDA_VISIBLE_DEVICES}" >> $LOG
-CMD="CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch ${DISTRIBUTED_ARGS} --config_file ${CONFIG} ${SCRIPT} ${SCRIPT_ARGS}"
+CMD="CUDA_VISIBLE_DEVICES=0,1,2,3 deepspeed ${DISTRIBUTED_ARGS} ${SCRIPT} ${SCRIPT_ARGS}"
 
 echo "*********************** START ****************************" >> $LOG
 echo $CMD >> $LOG
