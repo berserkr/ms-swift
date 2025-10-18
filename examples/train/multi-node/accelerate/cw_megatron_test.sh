@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
-#SBATCH --nodes=64
-#SBATCH --job-name=lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss
+#SBATCH --nodes=32
+#SBATCH --job-name=mcore-debug
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/mcore-debug-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/mcore-debug-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -18,16 +18,18 @@
 #### sbatch -N 16 /mnt/home/bobcalio/ai-coreweave/dolomite_engine/scripts/cw-gb200/pretrain-120b.sbatch <config>
 
 #### Variables
-PER_DEVICE_TRAIN_BATCH_SIZE=2
-GRADIENT_ACCUMULATION_STEPS=8 #2 # has to be 2 for 30b, 1 for 120b
-#SEQLEN=32768
-#SEQLEN=8192
-#SEQLEN=65536
-SEQLEN=16384
-#SEQLEN=131072
+PER_DEVICE_TRAIN_BATCH_SIZE=1
+GRADIENT_ACCUMULATION_STEPS=4 #2 # has to be 2 for 30b, 1 for 120b
 #SEQLEN=16384
+#SEQLEN=65536
+#SEQLEN=32768
+SEQLEN=8192
+#SEQLEN=131072
+#SEQLEN=4096
 #LR=9e-05
-LR=1e-5
+LR=5e-05
+MIN_LR=5e-06
+
 CLIP=1.0
 
 WARMUP_RATIO=0.1
@@ -78,7 +80,7 @@ export WANDB__SERVICE_WAIT=300
 PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
 
 container_mounts="/mnt:/mnt"
-container_image="/mnt/vast/squash/swift_v3_scattermoe.sqsh"
+container_image="/mnt/vast/squash/swift_v3_megatron-apex.sqsh"
 LOG=/mnt/vast/proj/checkpoints/bathen/logs/${SHORT_NAME}_${SLURM_JOBID}.log
 
 # from MLPerf team -- need top review 
@@ -157,46 +159,61 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache 
-#export CELOSS_PARALLEL_SIZE=4096
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/lc-ckpts/120b-lc-128k-p4/hf \
-    --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0830/phase1_mix_0830_v5.jsonl \
+DATASET=/mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0914/phase1_mix_0914_v3.jsonl
+MODEL=/mnt/vast/proj/checkpoints/bathen/models/base/Qwen3-30B-A3B-Base-mcore
+OUTPUT=/mnt/vast/proj/checkpoints/bathen/models/sft/Qwen3-30B-A3B-Base-mcore-phase1_mix_0914_v3
+
+export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache
+export MEGATRON_LM_PATH=/mnt/home/bathen/src/github.com/Megatron-LM
+export PYTORCH_CUDA_ALLOC_CONF='expandable_segments:True'
+export SCRIPT_ARGS="--load ${MODEL} \
+    --dataset ${DATASET} \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
-    --num_train_epochs 3 \
-    --per_device_train_batch_size 1 \
-    --per_device_eval_batch_size 1 \
-    --learning_rate 1e-5 \
-    --gradient_accumulation_steps 1 \
+    --max_epochs  3 \
+    --per_device_train_batch_size ${PER_DEVICE_TRAIN_BATCH_SIZE} \
+    --per_device_eval_batch_size ${PER_DEVICE_TRAIN_BATCH_SIZE} \
+    --learning_rate ${LR} \
+    --lr_warmup_fraction 0.05 \
+    --min_lr ${MIN_LR} \
+    --gradient_accumulation_steps ${GRADIENT_ACCUMULATION_STEPS} \
     --packing true \
     --eval_steps 100 \
     --save_steps 100 \
     --logging_steps 1 \
-    --warmup_ratio 0.05 \
+    --max_length ${SEQLEN} \
     --dataloader_num_workers 64 \
     --dataset_num_proc 64 \
     --save_total_limit 5 \
-    --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss \
+    --output_dir  ${OUTPUT} \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
-    --gradient_checkpointing false \
-    --max_length 16384 \
-    --max_model_len 16384 \
-    --sequence_parallel_size 4 \
+    --pipeline_model_parallel_size 2 \
+    --expert_model_parallel_size 8 \
+    --pipeline_model_parallel_size 2 \
+    --expert_model_parallel_size 8 \
+    --moe_permute_fusion true \
+    --moe_grouped_gemm true \
+    --moe_shared_expert_overlap true \
+    --moe_aux_loss_coeff 1e-3 \
+    --recompute_granularity full \
+    --recompute_method uniform \
+    --recompute_num_layers 1 \
+    --finetune true \
+    --sequence_parallel true \
+    --no_save_optim true \
+    --no_save_rng true \
 
     "
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss/v0-20250830-042840/checkpoint-2500 \
-#    --loss_scale granite \
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss/v0-20250828-191934/checkpoint-5000 \
-#    --rope_scaling yarn \
+
+
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/mcore-debug/v0-20250830-042840/checkpoint-2500 \
 
 echo $SCRIPT_ARGS >> $LOG
 
 CONFIG=examples/train/multi-node/accelerate/fsdp_accelerate.yaml
-SCRIPT=swift/cli/sft.py
+SCRIPT=swift/cli/_megatron/sft.py
 
 echo "CUDA DEVICES: ${CUDA_VISIBLE_DEVICES}" >> $LOG
 CMD="CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch ${DISTRIBUTED_ARGS} --config_file ${CONFIG} ${SCRIPT} ${SCRIPT_ARGS}"

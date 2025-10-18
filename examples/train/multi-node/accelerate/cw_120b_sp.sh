@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
 #SBATCH --nodes=64
-#SBATCH --job-name=lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss
+#SBATCH --job-name=lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-6-16384-noyarn-celoss4k-4sp
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-6-16384-noyarn-celoss4k-4sp-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-6-16384-noyarn-celoss4k-4sp-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -27,7 +27,7 @@ SEQLEN=16384
 #SEQLEN=131072
 #SEQLEN=16384
 #LR=9e-05
-LR=1e-5
+LR=5e-6
 CLIP=1.0
 
 WARMUP_RATIO=0.1
@@ -158,7 +158,8 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
 echo $DISTRIBUTED_ARGS >> $LOG
 
 export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache 
-#export CELOSS_PARALLEL_SIZE=4096
+#export CELOSS_PARALLEL_SIZE=2048
+export CELOSS_PARALLEL_SIZE=4096
 export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/lc-ckpts/120b-lc-128k-p4/hf \
     --train_type full \
     --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0830/phase1_mix_0830_v5.jsonl \
@@ -167,7 +168,7 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/c
     --num_train_epochs 3 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --learning_rate 1e-5 \
+    --learning_rate 5e-6 \
     --gradient_accumulation_steps 1 \
     --packing true \
     --eval_steps 100 \
@@ -178,7 +179,7 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/c
     --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-6-16384-noyarn-celoss4k-4sp \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
@@ -188,9 +189,9 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/c
     --sequence_parallel_size 4 \
 
     "
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss/v0-20250830-042840/checkpoint-2500 \
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-6-16384-noyarn-celoss4k-4sp/v0-20250830-042840/checkpoint-2500 \
 #    --loss_scale granite \
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-5-16384-noyarn-noceloss/v0-20250828-191934/checkpoint-5000 \
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-6-16384-noyarn-celoss4k-4sp/v0-20250828-191934/checkpoint-5000 \
 #    --rope_scaling yarn \
 
 echo $SCRIPT_ARGS >> $LOG
