@@ -1,7 +1,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import re
 from typing import TYPE_CHECKING, List, Tuple, Union
-
+import ast
 import json
 
 from .base import BaseAgentTemplate

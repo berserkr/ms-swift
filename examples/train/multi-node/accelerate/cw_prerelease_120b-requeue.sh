@@ -1,28 +1,33 @@
 #!/bin/bash
-#SBATCH --partition=hpc-high
-#SBATCH --nodes=32
-#SBATCH --job-name=granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass
+#SBATCH --partition=hpc-mid
+#SBATCH --nodes=64
+#SBATCH --job-name=granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-4ep-1acc-granite-9e-6-8192_2.0scale_0.1warm
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass-err.%j.log" 
-####SBATCH --open-mode=append
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-4ep-1acc-granite-9e-6-8192_2.0scale_0.1warm-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-4ep-1acc-granite-9e-6-8192_2.0scale_0.1warm-err.%j.log" 
+#SBATCH --open-mode=append    #<--- for a requeued job so it does not wipe out logs
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
 #SBATCH --segment=8 # changed form 2-->8 
+####SBATCH --segment=9 # 9 18 <-- currently commented out and experimenting how it impacts 256 node job
+####SBATCH --exclusive # <-- currently commented out and experimenting how it impacts 256 node job
+
+####run this command on slurm login node: 
+#### sbatch -N 16 /mnt/home/bobcalio/ai-coreweave/dolomite_engine/scripts/cw-gb200/pretrain-120b.sbatch <config>
 
 #### Variables
 PER_DEVICE_TRAIN_BATCH_SIZE=2
 GRADIENT_ACCUMULATION_STEPS=8 #2 # has to be 2 for 30b, 1 for 120b
 #SEQLEN=32768
-#SEQLEN=32768
-#SEQLEN=40960
-SEQLEN=32768
+#SEQLEN=16384
+#SEQLEN=65536
+SEQLEN=8192
 #SEQLEN=131072
-#SEQLEN=4096
+#SEQLEN=8192
 #LR=9e-05
-LR=5e-06
+LR=9e-6
 CLIP=1.0
 
 WARMUP_RATIO=0.1
@@ -68,21 +73,51 @@ export WANDB_DISABLE_GIT=1
 export WANDB__SERVICE_WAIT=300
 
 : "${PREFLIGHT_TEST:=0}"
-: "${CLEANUP_TEMP_DIR:=0}"
-
-PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
-
-#container_image="/mnt/vast/squash/open-instruct-g4-v3.sqsh"
-#container_image="/mnt/vast/squash/open-instruct-g4-tf4520.sqsh"
+: "${SLURM_RESTART_COUNT:=0}" 
+MAX_SLURM_RESTART_COUNT=30  #change as you see fit
 
 container_mounts="/mnt:/mnt"
 container_image="/mnt/vast/squash/swift_v3_scattermoe.sqsh"
 LOG=/mnt/vast/proj/checkpoints/bathen/logs/${SHORT_NAME}_${SLURM_JOBID}.log
 
-# from MLPerf team -- need top review 
-#. ${HOME}/ai-coreweave/dolomite_engine/scripts/cw-gb200/config_common.sh
+#trap any exit and requeue if needed 
+function cleanup {
+    local exit_status=$?
+    if [ "$exit_status" -ne 0 ]; then
+      if [ $SLURM_RESTART_COUNT -gt $MAX_SLURM_RESTART_COUNT ]; then
+        echo -e "\n$(date) ${SLURM_JOB_ID} SLURM_RESTART_COUNT exceeded ${SLURM_RESTART_COUNT} .. exiting" >> $LOG
+        exit ${SLURM_RESTART_COUNT}
+      fi
+      echo -e "\n$(date) ${SLURM_JOB_ID} Requeued" >> $LOG
+      scontrol requeue ${SLURM_JOB_ID}
+    else
+      echo "Script exiting with status: $exit_status" >> $LOG
+    fi
+}
 
-#default nccl vars handled in .nccl.conf
+trap cleanup EXIT
+
+##pre-flight NCCL Perf test on all GPUs
+
+if [ ${PREFLIGHT_TEST} -gt 0 ]; then
+    set +e
+    #use the compute node's nccl test and not container 
+    nccl_test="alltoall_perf"
+    #nccl_test="reduce_scatter_perf"
+    echo -e "$(date) ${SLURM_JOBID} Pre Filght NCCL Test  ${nccl_test}" >>$LOG
+    srun --ntasks-per-node=1 --mpi=pmix /opt/nccl-tests/build/${nccl_test} -T 120 -b 1G -e 8G -f 2 -g 4
+    rc=$?
+    if [ $rc -ne 0 ]; then
+      echo -e "\n$(date) ${SLURM_JOBID} NCCL test failed .. Exiting $rc" >>$LOG
+      exit $rc
+    fi
+    set -e
+    echo "$(date) Pre-flight test passed" >>$LOG
+fi 
+#end pre-flight test 
+
+echo "$(date) SLURM_RESTART_COUNT == ${SLURM_RESTART_COUNT}" >>$LOG
+
 export TOKENIZERS_PARALLELISM=false 
 export NCCL_SOCKET_IFNAME=eth0
 #export GLOO_SOCKET_IFNAME=eth0
@@ -134,8 +169,8 @@ export TRITON_CACHE_DIR="${TRITON_HOME}/cache"
 echo "Using nodes: $SLURM_JOB_NODELIST" >> $LOG
 #save hostlist for replay / debug if needed 
 # echo $SLURM_JOB_NODELIST > $run_dir/hostfile-${SLURM_JOB_ID}.txt
-#setup some srun args 
-SRUN_ARGS="--kill-on-bad-exit=1  \
+#setup some srun args  Added -l to track slurm step number in out 
+SRUN_ARGS="-l --kill-on-bad-exit=1  \
             --container-image=${container_image}  \
             --container-mounts=${container_mounts}  \
             --no-container-remap-root \
@@ -155,41 +190,40 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-3b-base-prerelease-killington-final-hybridclass \
+export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache 
+export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/granite-4.0-medium-base-prerelease-greylock-final \
     --train_type full \
     --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1022/phase1_mix_1006_102225_v2.jsonl \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
-    --num_train_epochs 3 \
+    --num_train_epochs 4 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --learning_rate 1e-5 \
-    --gradient_accumulation_steps 4 \
+    --learning_rate 9e-6 \
+    --gradient_accumulation_steps 1 \
     --packing true \
-    --eval_steps 100 \
-    --save_steps 100 \
+    --eval_steps 500 \
+    --save_steps 500 \
     --logging_steps 1 \
-    --max_length 32768 \
-    --warmup_ratio 0.05 \
+    --max_length 8192 \
+    --warmup_ratio 0.01 \
     --dataloader_num_workers 64 \
     --dataset_num_proc 64 \
-    --save_total_limit 5 \
+    --save_total_limit 4 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-4ep-1acc-granite-9e-6-8192_2.0scale_0.1warm \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
-    --use_liger_kernel true \
-
+    --gradient_checkpointing false \
+    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-4ep-1acc-granite-9e-6-8192_2.0scale_0.1warm/v0-20251122-231205/checkpoint-9884 \
     "
 
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass/v0-20250902-013937/checkpoint-8100
-#    --use_liger_kernel true \
-#    --gradient_checkpointing false \
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-2acc-granite-1e-5-32768-hybridclass-dbg/v0-20250828-224635/checkpoint-7900 \
 
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-4ep-1acc-granite-9e-6-8192_2.0scale_0.1warm/v0-20250830-042840/checkpoint-2500 \
 #    --loss_scale granite \
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-4ep-1acc-granite-9e-6-8192_2.0scale_0.1warm/v0-20250828-191934/checkpoint-5000 \
+
 echo $SCRIPT_ARGS >> $LOG
 
 CONFIG=examples/train/multi-node/accelerate/fsdp_accelerate.yaml

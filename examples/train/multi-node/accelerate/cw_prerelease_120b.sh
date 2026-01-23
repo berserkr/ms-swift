@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
 #SBATCH --nodes=64
-#SBATCH --job-name=lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-6-8192
+#SBATCH --job-name=granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-8192_2.5scale
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-6-8192-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-6-8192-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-8192_2.5scale-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-8192_2.5scale-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -27,7 +27,7 @@ SEQLEN=8192
 #SEQLEN=131072
 #SEQLEN=8192
 #LR=9e-05
-LR=1e-6
+LR=1e-5
 CLIP=1.0
 
 WARMUP_RATIO=0.1
@@ -158,15 +158,15 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
 echo $DISTRIBUTED_ARGS >> $LOG
 
 export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache 
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/lc-ckpts/120b-lc-128k-p4/hf \
+export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/granite-4.0-medium-base-prerelease-greylock-final \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0830/phase1_mix_0830_v5.jsonl \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1022/phase1_mix_1006_102225_v2.jsonl \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
     --num_train_epochs 3 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --learning_rate 1e-6 \
+    --learning_rate 1e-5 \
     --gradient_accumulation_steps 1 \
     --packing true \
     --eval_steps 500 \
@@ -178,16 +178,16 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/c
     --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-6-8192 \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-8192_2.5scale \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
     --gradient_checkpointing false \
-
     "
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-6-8192/v0-20250830-042840/checkpoint-2500 \
+    
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-8192_2.5scale/v0-20250830-042840/checkpoint-2500 \
 #    --loss_scale granite \
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/lc-120b-lc-128k-p4-phase1_mix_0830_v5-pack-3ep-4acc-granite-1e-6-8192/v0-20250828-191934/checkpoint-5000 \
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-medium-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-8192_2.5scale/v0-20250828-191934/checkpoint-5000 \
 
 echo $SCRIPT_ARGS >> $LOG
 

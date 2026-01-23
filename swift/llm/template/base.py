@@ -235,6 +235,7 @@ class Template(ProcessorMixin):
                 tool_content = self.agent_template._format_tool_calls(messages[i_start:i + 1])
                 messages[i_start:i + 1] = [{'role': 'assistant', 'content': tool_content}]
                 i = i_start + 1
+                
             else:
                 i += 1
 

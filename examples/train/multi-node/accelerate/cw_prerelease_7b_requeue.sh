@@ -1,24 +1,29 @@
 #!/bin/bash
-#SBATCH --partition=hpc-high
-#SBATCH --nodes=32
-#SBATCH --job-name=granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass
+#SBATCH --partition=hpc-mid
+#SBATCH --nodes=16
+#SBATCH --job-name=granite-4.0-tiny-base-prerelease-greylock-final-phase1_mix_1006_102225_v1-pack-3ep-4acc-granite-1e-5-65536-swift_v3_2.0scale_float16
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-tiny-base-prerelease-greylock-final-phase1_mix_1006_102225_v1-pack-3ep-4acc-granite-1e-5-65536-swift_v3_2.0scale_float16-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-tiny-base-prerelease-greylock-final-phase1_mix_1006_102225_v1-pack-3ep-4acc-granite-1e-5-65536-swift_v3_2.0scale_float16-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
 #SBATCH --segment=8 # changed form 2-->8 
+####SBATCH --segment=9 # 9 18 <-- currently commented out and experimenting how it impacts 256 node job
+####SBATCH --exclusive # <-- currently commented out and experimenting how it impacts 256 node job
+
+####run this command on slurm login node: 
+#### sbatch -N 16 /mnt/home/bobcalio/ai-coreweave/dolomite_engine/scripts/cw-gb200/pretrain-120b.sbatch <config>
 
 #### Variables
 PER_DEVICE_TRAIN_BATCH_SIZE=2
 GRADIENT_ACCUMULATION_STEPS=8 #2 # has to be 2 for 30b, 1 for 120b
-#SEQLEN=32768
-#SEQLEN=32768
+#SEQLEN=65536
 #SEQLEN=40960
-SEQLEN=32768
+#SEQLEN=16384
+SEQLEN=65536
 #SEQLEN=131072
 #SEQLEN=4096
 #LR=9e-05
@@ -71,9 +76,6 @@ export WANDB__SERVICE_WAIT=300
 : "${CLEANUP_TEMP_DIR:=0}"
 
 PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
-
-#container_image="/mnt/vast/squash/open-instruct-g4-v3.sqsh"
-#container_image="/mnt/vast/squash/open-instruct-g4-tf4520.sqsh"
 
 container_mounts="/mnt:/mnt"
 container_image="/mnt/vast/squash/swift_v3_scattermoe.sqsh"
@@ -155,11 +157,11 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-3b-base-prerelease-killington-final-hybridclass \
+export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache 
+export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-tiny-base-prerelease-greylock-hf-final \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1022/phase1_mix_1006_102225_v2.jsonl \
-    --torch_dtype bfloat16 \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1022/phase1_mix_1006_102225_v1.jsonl \
+    --torch_dtype float16 \
     --split_dataset_ratio 0.01 \
     --num_train_epochs 3 \
     --per_device_train_batch_size 1 \
@@ -170,26 +172,23 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granit
     --eval_steps 100 \
     --save_steps 100 \
     --logging_steps 1 \
-    --max_length 32768 \
+    --max_length 65536 \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 64 \
     --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-tiny-base-prerelease-greylock-final-phase1_mix_1006_102225_v1-pack-3ep-4acc-granite-1e-5-65536-swift_v3_2.0scale_float16 \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
-    --use_liger_kernel true \
-
     "
-
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass/v0-20250902-013937/checkpoint-8100
-#    --use_liger_kernel true \
-#    --gradient_checkpointing false \
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-2acc-granite-1e-5-32768-hybridclass-dbg/v0-20250828-224635/checkpoint-7900 \
-
+    
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-tiny-base-prerelease-greylock-final-phase1_mix_1006_102225_v1-pack-3ep-4acc-granite-1e-5-65536-swift_v3_2.0scale_float16/v0-20250830-042840/checkpoint-2500 \
 #    --loss_scale granite \
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-tiny-base-prerelease-greylock-final-phase1_mix_1006_102225_v1-pack-3ep-4acc-granite-1e-5-65536-swift_v3_2.0scale_float16/v1-20250831-062806/checkpoint-1300
+#    --router_aux_loss_coef 1e-3 \
+
 echo $SCRIPT_ARGS >> $LOG
 
 CONFIG=examples/train/multi-node/accelerate/fsdp_accelerate.yaml

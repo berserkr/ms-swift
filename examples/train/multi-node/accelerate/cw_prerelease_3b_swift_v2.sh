@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-high
 #SBATCH --nodes=32
-#SBATCH --job-name=granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass
+#SBATCH --job-name=granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-5-32768-hybridclass
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-5-32768-hybridclass-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-5-32768-hybridclass-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -72,11 +72,8 @@ export WANDB__SERVICE_WAIT=300
 
 PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
 
-#container_image="/mnt/vast/squash/open-instruct-g4-v3.sqsh"
-#container_image="/mnt/vast/squash/open-instruct-g4-tf4520.sqsh"
-
 container_mounts="/mnt:/mnt"
-container_image="/mnt/vast/squash/swift_v3_scattermoe.sqsh"
+container_image="/mnt/vast/squash/swift_v2_scattermoe.sqsh"
 LOG=/mnt/vast/proj/checkpoints/bathen/logs/${SHORT_NAME}_${SLURM_JOBID}.log
 
 # from MLPerf team -- need top review 
@@ -139,7 +136,7 @@ SRUN_ARGS="--kill-on-bad-exit=1  \
             --container-image=${container_image}  \
             --container-mounts=${container_mounts}  \
             --no-container-remap-root \
-            --container-workdir=/mnt/home/bathen/src/github.com/ms-swift
+            --container-workdir=/mnt/home/bathen/src/github.com/ms-swift-090925
             "
 echo $SRUN_ARGS >> $LOG
 
@@ -155,18 +152,18 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache
 export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-3b-base-prerelease-killington-final-hybridclass \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1022/phase1_mix_1006_102225_v2.jsonl \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0830/phase1_mix_0830_v5.jsonl \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
     --num_train_epochs 3 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --learning_rate 1e-5 \
+    --learning_rate 5e-5 \
     --gradient_accumulation_steps 4 \
     --packing true \
+    --packing_cache /mnt/vast/proj/checkpoints/bathen/cache \
     --eval_steps 100 \
     --save_steps 100 \
     --logging_steps 1 \
@@ -176,7 +173,7 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granit
     --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-5-32768-hybridclass \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
@@ -184,10 +181,10 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granit
 
     "
 
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass/v0-20250902-013937/checkpoint-8100
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-5-32768-hybridclass/v0-20250902-013937/checkpoint-8100
 #    --use_liger_kernel true \
 #    --gradient_checkpointing false \
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-2acc-granite-1e-5-32768-hybridclass-dbg/v0-20250828-224635/checkpoint-7900 \
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-2acc-granite-5e-5-32768-hybridclass-dbg/v0-20250828-224635/checkpoint-7900 \
 
 #    --loss_scale granite \
 echo $SCRIPT_ARGS >> $LOG

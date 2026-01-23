@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --partition=hpc-high
+#SBATCH --partition=hpc-mid
 #SBATCH --nodes=32
-#SBATCH --job-name=granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass
+#SBATCH --job-name=granite-4.0-small-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-9e-6-16384
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass-err.%j.log" 
-####SBATCH --open-mode=append
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-small-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-9e-6-16384-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-small-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-9e-6-16384-err.%j.log" 
+#SBATCH --open-mode=append    #<--- for a requeued job so it does not wipe out logs
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
 #SBATCH --segment=8 # changed form 2-->8 
@@ -16,9 +16,9 @@
 PER_DEVICE_TRAIN_BATCH_SIZE=2
 GRADIENT_ACCUMULATION_STEPS=8 #2 # has to be 2 for 30b, 1 for 120b
 #SEQLEN=32768
-#SEQLEN=32768
 #SEQLEN=40960
-SEQLEN=32768
+#SEQLEN=65536
+SEQLEN=16384
 #SEQLEN=131072
 #SEQLEN=4096
 #LR=9e-05
@@ -72,11 +72,8 @@ export WANDB__SERVICE_WAIT=300
 
 PYXIS_DEFAULTS=( '--no-container-mount-home' '--no-container-remap-root')
 
-#container_image="/mnt/vast/squash/open-instruct-g4-v3.sqsh"
-#container_image="/mnt/vast/squash/open-instruct-g4-tf4520.sqsh"
-
 container_mounts="/mnt:/mnt"
-container_image="/mnt/vast/squash/swift_v3_scattermoe.sqsh"
+container_image="/mnt/vast/squash/swift_v2_scattermoe.sqsh"
 LOG=/mnt/vast/proj/checkpoints/bathen/logs/${SHORT_NAME}_${SLURM_JOBID}.log
 
 # from MLPerf team -- need top review 
@@ -155,8 +152,7 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-3b-base-prerelease-killington-final-hybridclass \
+export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-small-base-prerelease-greylock-final \
     --train_type full \
     --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1022/phase1_mix_1006_102225_v2.jsonl \
     --torch_dtype bfloat16 \
@@ -164,32 +160,29 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granit
     --num_train_epochs 3 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --learning_rate 1e-5 \
+    --learning_rate 9e-6 \
     --gradient_accumulation_steps 4 \
     --packing true \
+    --packing_cache /mnt/vast/proj/checkpoints/bathen/cache \
     --eval_steps 100 \
     --save_steps 100 \
     --logging_steps 1 \
-    --max_length 32768 \
+    --max_length 16384 \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 64 \
     --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-small-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-9e-6-16384 \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
-    --use_liger_kernel true \
 
     "
-
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-1e-5-32768-hybridclass/v0-20250902-013937/checkpoint-8100
-#    --use_liger_kernel true \
-#    --gradient_checkpointing false \
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_1006_102225_v2-pack-3ep-2acc-granite-1e-5-32768-hybridclass-dbg/v0-20250828-224635/checkpoint-7900 \
-
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-small-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-9e-6-16384/v0-20250830-042840/checkpoint-2500 \
 #    --loss_scale granite \
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-small-base-prerelease-greylock-final-phase1_mix_1006_102225_v2-pack-3ep-4acc-granite-9e-6-16384/v0-20250828-191934/checkpoint-5000 \
+
 echo $SCRIPT_ARGS >> $LOG
 
 CONFIG=examples/train/multi-node/accelerate/fsdp_accelerate.yaml
@@ -202,6 +195,7 @@ echo "*********************** START ****************************" >> $LOG
 echo $CMD >> $LOG
 
 srun ${SRUN_ARGS} bash -c "${CMD}"
+
 rc=$?
 echo "rc=${rc}"
 sacct -j $SLURM_JOBID -o "jobid,jobname,start,end,state" >> $LOG

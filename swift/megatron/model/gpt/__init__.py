@@ -51,4 +51,5 @@ register_megatron_model(
         ModelType.ernie,
         ModelType.glm4_5,
         ModelType.deepseek_v3_1,
+        ModelType.granite,
     ], model_provider, convert_gpt_hf_config, convert_mcore2hf, convert_hf2mcore))
