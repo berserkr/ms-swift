@@ -1,12 +1,10 @@
-# Copyright (c) Alibaba, Inc. and its affiliates.
+# Copyright (c) ModelScope Contributors. All rights reserved.
 import os
 import re
 import sys
 import time
-from copy import deepcopy
 from datetime import datetime
 from functools import partial
-from subprocess import DEVNULL, PIPE, STDOUT, Popen
 from typing import Type
 
 import gradio as gr
@@ -14,14 +12,14 @@ import json
 from json import JSONDecodeError
 from transformers.utils import is_torch_cuda_available, is_torch_npu_available
 
-from swift.llm import SamplingArguments
-from swift.llm.dataset.register import get_dataset_list
-from swift.ui.base import BaseUI
-from swift.ui.llm_sample.model import Model
-from swift.ui.llm_sample.runtime import SampleRuntime
-from swift.ui.llm_sample.sample import Sample
-from swift.ui.llm_train.utils import run_command_in_background_with_popen
+from swift.arguments import SamplingArguments
+from swift.dataset import get_dataset_list
 from swift.utils import get_device_count, get_logger
+from ..base import BaseUI
+from ..llm_train import run_command_in_background_with_popen
+from .model import Model
+from .runtime import SampleRuntime
+from .sample import Sample
 
 logger = get_logger()
 
@@ -75,13 +73,13 @@ class LLMSample(BaseUI):
                 'en': 'The dataset(s) to train the models, support multi select and local folder/files'
             }
         },
-        'num_sampling_per_gpu_batch_size': {
+        'num_sampling_batch_size': {
             'label': {
                 'zh': '每次采样的批次大小',
                 'en': 'The batch size of sampling'
             }
         },
-        'num_sampling_per_gpu_batches': {
+        'num_sampling_batches': {
             'label': {
                 'zh': '采样批次数量',
                 'en': 'Num of Sampling batches'
@@ -136,9 +134,8 @@ class LLMSample(BaseUI):
                         choices=get_dataset_list(),
                         scale=20,
                         allow_custom_value=True)
-                    gr.Slider(
-                        elem_id='num_sampling_per_gpu_batch_size', minimum=1, maximum=128, step=1, value=1, scale=10)
-                    gr.Slider(elem_id='num_sampling_per_gpu_batches', minimum=1, maximum=128, step=1, value=1, scale=10)
+                    gr.Slider(elem_id='num_sampling_batch_size', minimum=1, maximum=128, step=1, value=1, scale=10)
+                    gr.Slider(elem_id='num_sampling_batches', minimum=1, maximum=128, step=1, value=1, scale=10)
                 SampleRuntime.build_ui(base_tab)
                 with gr.Row(equal_height=True):
                     gr.Dropdown(
@@ -199,11 +196,13 @@ class LLMSample(BaseUI):
         kwargs.update(more_params)
         model = kwargs.get('model')
         if os.path.exists(model) and os.path.exists(os.path.join(model, 'args.json')):
-            kwargs['ckpt_dir'] = kwargs.pop('model')
-            with open(os.path.join(kwargs['ckpt_dir'], 'args.json'), 'r', encoding='utf-8') as f:
+            args_path = os.path.join(model, 'args.json')
+            if os.path.exists(os.path.join(model, 'adapter_config.json')):
+                kwargs['adapters'] = kwargs.pop('model')
+            with open(args_path, 'r', encoding='utf-8') as f:
                 _json = json.load(f)
                 kwargs['model_type'] = _json['model_type']
-                kwargs['train_type'] = _json['train_type']
+                kwargs['tuner_type'] = _json['tuner_type']
         sample_args = SamplingArguments(
             **{
                 key: value.split(' ') if key in kwargs_is_list and kwargs_is_list[key] else value
@@ -216,20 +215,20 @@ class LLMSample(BaseUI):
         for e in kwargs:
             if isinstance(kwargs[e], list):
                 params += f'--{e} {cls.quote}{sep.join(kwargs[e])}{cls.quote} '
-                command.extend([f'--{e}', f'{" ".join(kwargs[e])}'])
+                command.extend([f'--{e}'] + kwargs[e])
             elif e in kwargs_is_list and kwargs_is_list[e]:
                 all_args = [arg for arg in kwargs[e].split(' ') if arg.strip()]
                 params += f'--{e} {cls.quote}{sep.join(all_args)}{cls.quote} '
-                command.extend([f'--{e}', f'{" ".join(all_args)}'])
+                command.extend([f'--{e}'] + all_args)
             else:
                 params += f'--{e} {cls.quote}{kwargs[e]}{cls.quote} '
                 command.extend([f'--{e}', f'{kwargs[e]}'])
         if more_params_cmd != '':
             params += more_params_cmd + ' '
-            more_params_cmd = more_params_cmd.split('--')
+            more_params_cmd = [param.strip() for param in more_params_cmd.split('--')]
             more_params_cmd = [param.split(' ') for param in more_params_cmd if param]
             for param in more_params_cmd:
-                command.extend([f'--{param[0]}', ' '.join(param[1:])])
+                command.extend([f'--{param[0]}'] + param[1:])
         all_envs = {}
         devices = other_kwargs['gpu_id']
         devices = [d for d in devices if d]

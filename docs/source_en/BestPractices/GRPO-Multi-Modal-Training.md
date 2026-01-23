@@ -23,7 +23,7 @@ class ClevrPreprocessor(ResponsePreprocessor):
 
 register_dataset(
     DatasetMeta(
-        ms_dataset_id='okwinds/clevr_cogen_a_train',
+        ms_dataset_id='AI-ModelScope/clevr_cogen_a_train',
         subsets=[
             SubsetDataset(
                 name='default',
@@ -137,9 +137,10 @@ swift rlhf \
     --vllm_mode server \
     --vllm_server_host 127.0.0.1 \
     --vllm_server_port 8000 \
-    --train_type full \
+    --tuner_type full \
     --torch_dtype bfloat16 \
-    --dataset 'okwinds/clevr_cogen_a_train' \
+    --dataset 'AI-ModelScope/clevr_cogen_a_train' \
+    --load_from_cache_file true \
     --max_completion_length 1024 \
     --num_train_epochs 1 \
     --per_device_train_batch_size 8 \
@@ -215,9 +216,10 @@ swift rlhf \
     --vllm_mode server \
     --vllm_server_host 127.0.0.1 \
     --vllm_server_port 8000 \
-    --train_type full \
+    --tuner_type full \
     --torch_dtype bfloat16 \
     --dataset 'AI-ModelScope/GEOQA_R1V_Train_8K' \
+    --load_from_cache_file true \
     --max_completion_length 1024 \
     --num_train_epochs 1 \
     --per_device_train_batch_size 8 \
@@ -304,9 +306,10 @@ swift rlhf \
     --vllm_mode server \
     --vllm_server_host 127.0.0.1 \
     --vllm_server_port 8000 \
-    --train_type full \
+    --tuner_type full \
     --torch_dtype bfloat16 \
     --dataset 'lmms-lab/multimodal-open-r1-8k-verified' \
+    --load_from_cache_file true \
     --max_completion_length 1024 \
     --num_train_epochs 1 \
     --per_device_train_batch_size 8 \

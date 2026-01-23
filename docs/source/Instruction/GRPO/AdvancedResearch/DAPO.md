@@ -49,8 +49,9 @@ DAPO 使用token级归一化，避免了回答长度在损失计算上的偏差�
 
 使用参数
 
-- loss_type bnpo 来使用token级归一化
+- loss_type bnpo/dapo 来使用token级归一化
 
+> loss_type 计算公式可参考[文档](../DeveloperGuide/loss_types.md)
 
 ## Overlong Filtering
 DAPO 认为被强制截断的回复的奖励噪声较大，可能会导致模型难以区分质量问题和长度问题。为此，DAPO 筛除了训练中被截断的数据，使其不参与损失计算。
@@ -72,13 +73,13 @@ DAPO 设计了三段式长度惩罚函数：
 $$
 R_{\text{length}}(L) =
 \begin{cases}
-0, & \text{if } L \leq L_{\text{cache}} \\[10pt]
--\dfrac{L - L_{\text{cache}}}{L_{\text{max}} - L_{\text{cache}}}, & \text{if } L_{\text{cache}} < L < L_{\text{max}} \\[10pt]
--1, & \text{if } L \geq L_{\text{max}}
+0, & L \leq L_{\text{max}} - L_{\text{cache}} \\[10pt]
+\dfrac{(L_{\text{max}} - L_{\text{cache}}) - L}{L_{\text{cache}}}, & L_{\text{max}} - L_{\text{cache}} < L \leq L_{\text{max}} \\[10pt]
+-1, &  L > L_{\text{max}}
 \end{cases}
 $$
 
-在长度位于(L_cache < L < L_max)区间时设置线性递增惩罚，在(L ≥ L_max)时设置最大惩罚(-1)
+在长度位于 $(L_{\text{max}} - L_{\text{cache}} < L \leq L_{\text{max}})$ 区间时设置线性递增惩罚，在 $(L > L_{\text{max}})$ 时设置最大惩罚(-1)
 
 
 使用参数
@@ -92,7 +93,7 @@ $$
 
 | 参数                 | 类型      | 值      |
 |----------------------|-----------|-------------|
-| `--loss_type`        | `str`     | `bnpo`     |
+| `--loss_type`        | `str`     | `bnpo`/`dapo`|
 | `--epsilon_high`     | `float`   | `0.28`      |
 | `--dynamic_sample`   | `bool`    | `true`      |
 | `--max_resample_times` | `int`   | `3`        |

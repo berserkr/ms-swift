@@ -1,4 +1,4 @@
-# Copyright (c) Alibaba, Inc. and its affiliates.
+# Copyright (c) ModelScope Contributors. All rights reserved.
 # Copyright 2023-present the HuggingFace Inc. team.
 import os.path
 from dataclasses import asdict, dataclass, field
@@ -21,7 +21,7 @@ from peft.config import PeftConfigMixin
 from peft.tuners import lora
 from peft.tuners.adalora import AdaLoraModel, RankAllocator
 from peft.tuners.lora import Embedding
-from transformers import Trainer
+from transformers import Trainer as HfTrainer
 
 from swift.utils import get_logger
 
@@ -89,12 +89,14 @@ def _create_and_replace_hook(self, peft_config, adapter_name, target, *args, **k
     all_supported_names = ('linear', )
     all_supported_types = (torch.nn.Embedding, torch.nn.Conv2d, transformers.pytorch_utils.Conv1D, lora.Linear)
     target_modules = getattr(peft_config, 'target_modules', None)
+    target_parameters = getattr(peft_config, 'target_parameters', None)
     if target is None:
         return
 
     if isinstance(target_modules, str) and not any(
         [name in target.__class__.__name__.lower()
-         for name in all_supported_names]) and not any([isinstance(target, type_) for type_ in all_supported_types]):
+         for name in all_supported_names]) and not any([isinstance(target, type_)
+                                                        for type_ in all_supported_types]) and not target_parameters:
         return
 
     if target.__class__.__name__ == 'NonDynamicallyQuantizableLinear':
@@ -105,7 +107,7 @@ def _create_and_replace_hook(self, peft_config, adapter_name, target, *args, **k
 
 def _convert_dtype(target: torch.nn.Module, adapter_name: str, lora_dtype: str):
     if lora_dtype is not None:
-        torch_dtype = eval(f'torch.{lora_dtype}')
+        torch_dtype = getattr(torch, lora_dtype)
         if hasattr(target, 'lora_A') and adapter_name in target.lora_A:
             target.lora_A[adapter_name].to(torch_dtype)
             target.lora_B[adapter_name].to(torch_dtype)
@@ -132,7 +134,7 @@ def create_optimizer_param_groups(self: PeftModel, **defaults):
         'embedding': {},
     }
 
-    decay_parameters = Trainer.get_decay_parameter_names(None, self.base_model)
+    decay_parameters = HfTrainer.get_decay_parameter_names(None, self.base_model)
     for name, param in self.base_model.named_parameters():
         if not param.requires_grad:
             continue

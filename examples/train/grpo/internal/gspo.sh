@@ -12,6 +12,7 @@ swift rlhf \
     --rlhf_type grpo \
     --model Qwen/Qwen2.5-7B-Instruct \
     --dataset AI-MO/NuminaMath-TIR#10000 \
+    --load_from_cache_file true \
     --torch_dtype bfloat16 \
     --beta 0.0 \
     --epsilon 3e-4 \
@@ -22,7 +23,7 @@ swift rlhf \
     --per_device_train_batch_size 2 \
     --gradient_accumulation_steps 8 \
     --num_generations 16 \
-    --train_type full \
+    --tuner_type full \
     --reward_funcs accuracy \
     --use_vllm true \
     --vllm_mode colocate \

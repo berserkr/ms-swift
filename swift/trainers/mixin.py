@@ -1,4 +1,4 @@
-# Copyright (c) Alibaba, Inc. and its affiliates.
+# Copyright (c) ModelScope Contributors. All rights reserved.
 # Part of the implementation is borrowed from huggingface/transformers.
 import collections
 import inspect
@@ -13,8 +13,9 @@ from contextlib import contextmanager
 from copy import copy
 from functools import partial, wraps
 from types import MethodType
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional
 
+import datasets
 import numpy as np
 import safetensors
 import torch
@@ -26,24 +27,32 @@ from datasets import Dataset as HfDataset
 from modelscope import check_local_model_is_latest
 from packaging import version
 from peft import PeftModel
-from torch.nn import Module
 from torch.utils.data import DataLoader
 from transformers import PreTrainedModel
-from transformers.data.data_collator import DataCollator
 from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.modeling_utils import unwrap_model
-from transformers.trainer import (OPTIMIZER_NAME, PREFIX_CHECKPOINT_DIR, SCHEDULER_NAME, TRAINER_STATE_NAME,
-                                  ParallelMode, TrainerCallback, reissue_pt_warnings)
+from transformers.trainer import OPTIMIZER_NAME, PREFIX_CHECKPOINT_DIR, SCHEDULER_NAME, TRAINER_STATE_NAME, ParallelMode
+from transformers.trainer import Trainer as HfTrainer
+from transformers.trainer import reissue_pt_warnings
 from transformers.trainer_utils import IntervalStrategy
 
+from swift.callbacks import callbacks_map
+from swift.dataloader import BatchSamplerShard, DataLoaderDispatcher, DataLoaderShard
 from swift.hub import get_hub
-from swift.llm import BatchSamplerShard, DataLoaderDispatcher, DataLoaderShard, Template
-from swift.llm.utils import update_generation_config_eos_token
-from swift.plugin import MeanMetric, compute_acc, extra_tuners, get_loss_func, get_metric
+from swift.loss import loss_map
+from swift.metrics import MeanMetric, compute_acc, eval_metrics_map
+from swift.model import get_llm_model, get_lm_head_model, save_checkpoint
+from swift.model.patcher import gather_sequence_parallel_outputs, revert_padding_free, transformers_seq_cls_forward
+from swift.optimizers import OptimizerCallback, optimizers_map
+from swift.sequence_parallel import SequenceParallelDispatcher, SequenceParallelSampler, sequence_parallel
+from swift.template import Template, update_generation_config_eos_token
+from swift.tuner_plugin import tuners_map
 from swift.tuners import SwiftModel
-from swift.utils import get_logger, is_dist, is_mp, is_mp_ddp, ms_logger_context, seed_worker
+from swift.utils import (HfConfigFactory, copy_files_by_pattern, deep_getattr, get_current_device, get_logger,
+                         get_packed_seq_params, is_dist, is_mp, is_mp_ddp, ms_logger_context, seed_worker)
+from . import patcher
 from .arguments import TrainingArguments
-from .utils import can_return_loss, find_labels, get_function, is_instance_of_ms_model
+from .utils import can_return_loss, dynamic_gradient_checkpointing, find_labels, get_function, is_instance_of_ms_model
 
 try:
     from trl import AutoModelForCausalLMWithValueHead
@@ -52,33 +61,37 @@ except (ImportError, RuntimeError):
 
 logger = get_logger()
 
+FLASH_CKPT_WAIT_TIMEOUT = 1800
+
 
 class SwiftMixin:
-    FLASH_CKPT_WAIT_TIMEOUT = 1800
 
     def __init__(self,
-                 model: Union[PreTrainedModel, Module] = None,
-                 args: TrainingArguments = None,
-                 data_collator: Optional[DataCollator] = None,
-                 train_dataset: Optional[HfDataset] = None,
-                 eval_dataset: Optional[Union[HfDataset, Dict[str, HfDataset]]] = None,
-                 template: Optional[Template] = None,
-                 model_init: Optional[Callable[[], PreTrainedModel]] = None,
-                 callbacks: Optional[List[TrainerCallback]] = None,
-                 optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+                 model: PreTrainedModel,
+                 args: TrainingArguments,
+                 template: Template,
+                 train_dataset: HfDataset,
+                 eval_dataset: Optional[HfDataset] = None,
                  **kwargs) -> None:
         if not hasattr(train_dataset, '__len__') and args.dataloader_num_workers > 1:
             args.dataloader_num_workers = 1
             logger.warning('Using IterableDataset, setting args.dataloader_num_workers to 1.')
         self.compute_loss_func = None  # Compatible with the older version of transformers
+        self.template = template
 
+        self.is_encoder_decoder = self.template.is_encoder_decoder
+        self.padding_free = self.template.padding_free
+        self.task_type = self.template.task_type
+        self.problem_type = getattr(model.config, 'problem_type', None)
         if args.check_model and hasattr(model, 'model_dir'):
-            with ms_logger_context(logging.CRITICAL):
-                check_local_model_is_latest(
-                    model.model_dir, user_agent={
-                        'invoked_by': 'local_trainer',
-                        'third_party': 'swift',
-                    })
+            with ms_logger_context(logging.CRITICAL), self._patch_timeout():
+                config_info = self._collect_config_info()
+                config_info.update({
+                    'invoked_by': 'local_trainer',
+                    'third_party': 'swift',
+                    'trainer_class': self.__class__.__name__,
+                })
+                check_local_model_is_latest(model.model_dir, user_agent=config_info)
         if eval_dataset is None and args:
             if getattr(args, 'eval_dataset', None):
                 # Avoid trainer throwing errors.
@@ -94,12 +107,16 @@ class SwiftMixin:
             'train': collections.defaultdict(_get_mean_metric),
             'eval': collections.defaultdict(_get_mean_metric)
         }
-        self.template = template
         self.hub = get_hub()
 
         self.model_meta = model.model_meta
+        self.model_info = model.model_info
 
-        kwargs.update(self.create_loss_and_metric(args))
+        data_collator = self._get_data_collator(args, template)
+        kwargs.update(self.create_loss_and_eval_metric(args))
+        trainer_parameters = inspect.signature(HfTrainer.__init__).parameters
+        tokenizer_key = 'processing_class' if 'processing_class' in trainer_parameters else 'tokenizer'
+        kwargs[tokenizer_key] = template.tokenizer
         with self.hub.patch_hub():
             super().__init__(
                 model=model,
@@ -107,21 +124,15 @@ class SwiftMixin:
                 data_collator=data_collator,
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
-                tokenizer=template.tokenizer,
-                model_init=model_init,
-                callbacks=callbacks,
-                optimizers=optimizers,
                 **kwargs)
-
+        self._add_callbacks()
         if get_function(model.__class__.forward) is not get_function(model.forward):
             self.label_names = find_labels(model)
             self.can_return_loss = can_return_loss(model)
         self.label_names = self.label_names or ['labels']
         self.start_time = time.time()
-        if self.template.sequence_parallel_size > 1:
-            from swift.trainers.sequence_parallel import sequence_parallel
-            sequence_parallel.prepare_trainer(self)
         self._fix_gradient_checkpointing()
+        self._patch_tasks()
         update_generation_config_eos_token(self.model.generation_config, self.template)
         if getattr(self.model, 'origin_generation_config', None):
             self.model.origin_generation_config.eos_token_id = self.model.generation_config.eos_token_id
@@ -129,6 +140,58 @@ class SwiftMixin:
             # The weights have already been loaded outside the trainer,
             # so reading train_state is skipped here.
             self.args.resume_from_checkpoint = None
+
+    def _get_data_collator(self, args, template):
+        padding_to = template.max_length if args.tuner_type == 'longlora' else None
+        return partial(template.data_collator, padding_to=padding_to)
+
+    def _add_callbacks(self):
+        for callback in self.args.callbacks:
+            self.add_callback(callbacks_map[callback](self.args, self))
+
+    @contextmanager
+    def _patch_timeout(self):
+        from modelscope.hub.api import HubApi
+        __init__ = HubApi.__init__
+
+        def __new_init__(self, *args, **kwargs):
+            timeout = kwargs.get('timeout')
+            if timeout is not None and timeout > 5:
+                kwargs['timeout'] = 5
+            __init__(self, *args, **kwargs)
+
+        HubApi.__init__ = __new_init__
+
+        try:
+            yield
+        finally:
+            HubApi.__init__ = __init__
+
+    def _collect_config_info(self) -> Dict[str, str]:
+        """
+        Collects trainer-specific configuration details.
+
+        Subclasses can override this method to provide additional configuration
+        information for model compatibility verification.
+
+        Returns:
+            Dict[str, str]: Configuration parameters as key-value pairs.
+        """
+        if self.__class__.__name__ == 'Seq2SeqTrainer':
+            if not self.template.use_chat_template:
+                return {
+                    'seq2seq_mode': 'pt',
+                }
+            else:
+                return {
+                    'seq2seq_mode': 'sft',
+                }
+        return {}
+
+    @property
+    def tokenizer(self):
+        # compat transformers5.0
+        return self.processing_class
 
     @contextmanager
     def _patch_deepspeed_load_checkpoint(self):
@@ -233,7 +296,7 @@ class SwiftMixin:
         supported_names = ('SentenceTransformer', )
         if AutoModelForCausalLMWithValueHead is not None:
             supported_classes = supported_classes + (AutoModelForCausalLMWithValueHead, )
-        save_safetensors = self.args.save_safetensors
+        save_safetensors = getattr(self.args, 'save_safetensors', True)
         use_flash_ckpt = self.args.use_flash_ckpt
 
         if not isinstance(self.model, supported_classes) and self.model.__class__.__name__ not in supported_names:
@@ -242,15 +305,17 @@ class SwiftMixin:
 
             _unwrap_model = unwrap_model(self.model)
             if isinstance(_unwrap_model, supported_classes):
+                save_kwargs = {'state_dict': state_dict}
+                if isinstance(_unwrap_model, PeftModel):
+                    save_kwargs['selected_adapters'] = ['default']
                 if use_flash_ckpt:
                     _unwrap_model.save_pretrained(
                         output_dir,
-                        state_dict=state_dict,
                         safe_serialization=False,
-                        save_function=self.flash_checkpointer.ckpt_agent.save)
+                        save_function=self.flash_checkpointer.ckpt_agent.save,
+                        **save_kwargs)
                 else:
-                    _unwrap_model.save_pretrained(
-                        output_dir, state_dict=state_dict, safe_serialization=save_safetensors)
+                    _unwrap_model.save_pretrained(output_dir, safe_serialization=save_safetensors, **save_kwargs)
             else:
                 logger.info('Trainer.model is not a `PreTrainedModel`, only saving its state dict.')
                 if use_flash_ckpt:
@@ -289,19 +354,22 @@ class SwiftMixin:
                 # modelscope save_pretrained does not support safe_serialization
                 PreTrainedModel.save_pretrained(
                     self.model, output_dir, state_dict=state_dict, safe_serialization=save_safetensors)
-        elif self.args.train_type in extra_tuners:
-            extra_tuners[self.args.train_type].save_pretrained(
+        elif self.args.tuner_type in tuners_map:
+            tuners_map[self.args.tuner_type].save_pretrained(
                 self.model, output_dir, state_dict=state_dict, safe_serialization=save_safetensors)
         else:
             if self.model.__class__.__name__ != 'SentenceTransformer':
+                save_kwargs = {'state_dict': state_dict}
+                if isinstance(self.model, PeftModel):
+                    save_kwargs['selected_adapters'] = ['default']
                 if use_flash_ckpt:
                     self.model.save_pretrained(
                         output_dir,
-                        state_dict=state_dict,
                         safe_serialization=False,
-                        save_function=self.flash_checkpointer.ckpt_agent.save)
+                        save_function=self.flash_checkpointer.ckpt_agent.save,
+                        **save_kwargs)
                 else:
-                    self.model.save_pretrained(output_dir, state_dict=state_dict, safe_serialization=save_safetensors)
+                    self.model.save_pretrained(output_dir, safe_serialization=save_safetensors, **save_kwargs)
             else:
 
                 @contextmanager
@@ -326,7 +394,6 @@ class SwiftMixin:
                     else:
                         self.model.save_pretrained(output_dir, safe_serialization=save_safetensors)
                         # copy sentencetransformers files
-                    from swift.utils import copy_files_by_pattern
                     copy_files_by_pattern(
                         self.model.model_dir, output_dir, '*.py', exclude_patterns=['model.safetensors.index.json'])
                     copy_files_by_pattern(
@@ -353,7 +420,6 @@ class SwiftMixin:
         is_adapter = isinstance(self.model, (SwiftModel, PeftModel))
         # tokenizer
         if not is_adapter:
-            from swift.llm import save_checkpoint
             additional_saved_files = self.model_meta.additional_saved_files
             save_checkpoint(
                 None,
@@ -586,6 +652,154 @@ class SwiftMixin:
         finally:
             Accelerator.clip_grad_norm_ = origin_clip_grad_norm_
 
+    def _patch_tasks(self):
+        if isinstance(self.model, PeftModel):
+            model = self.model.model
+        else:
+            model = self.model
+        task_type = self.task_type
+        sp_enabled = self.template.sequence_parallel_size > 1
+        pf_enabled = bool(self.template.padding_free)
+        padding_side = 'left' if pf_enabled else self.template.padding_side
+
+        if 'SentenceTransformer' in model.__class__.__name__:
+
+            def forward_transformer(transformer, features: Dict[str, torch.Tensor],
+                                    **kwargs) -> Dict[str, torch.Tensor]:
+                trans_features = {
+                    key: value
+                    for key, value in features.items()
+                    if key in ['input_ids', 'attention_mask', 'token_type_ids', 'inputs_embeds', 'position_ids']
+                }
+
+                outputs = transformer.auto_model(**trans_features, **kwargs, return_dict=True)
+                token_embeddings = outputs[0]
+                features['token_embeddings'] = token_embeddings
+
+                if transformer.auto_model.config.output_hidden_states and 'hidden_states' in outputs:
+                    features['all_layer_embeddings'] = outputs['hidden_states']
+
+                return features
+
+            from sentence_transformers.models import Transformer
+            if isinstance(model[0], Transformer):
+                model[0].forward = MethodType(forward_transformer, model[0])
+
+            def forward_sentence_transformer(sentence_transformer, **kwargs) -> Dict[str, torch.Tensor]:
+                input = kwargs
+                kwargs = {}
+                for idx, (module_name, module) in enumerate(sentence_transformer.named_children()):
+                    from sentence_transformers.models import Router
+                    if isinstance(module, Router):
+                        module_kwargs = kwargs
+                    else:
+                        module_kwarg_keys = []
+                        if sentence_transformer.module_kwargs is not None:
+                            module_kwarg_keys = sentence_transformer.module_kwargs.get(module_name, [])
+                        module_kwargs = {
+                            key: value
+                            for key, value in kwargs.items() if key in module_kwarg_keys or (
+                                hasattr(module, 'forward_kwargs') and key in module.forward_kwargs)
+                        }
+                    output = module(input, **module_kwargs)
+                    if idx == 0 and self.template.padding_free:
+                        output = revert_padding_free(output, input, padding_side)
+                    input = output
+                return {'last_hidden_state': input['sentence_embedding']}
+
+            model.forward = MethodType(forward_sentence_transformer, model)
+        else:
+
+            def _register_llm_hooks_in_order(llm_model: nn.Module, hooks: List[Callable]):
+                # hooks are provided in desired execution order.
+                # We use prepend=True and register in reverse to preserve the order.
+                for hook in reversed(hooks):
+                    llm_model.register_forward_hook(hook, with_kwargs=True, prepend=True)
+
+            def _get_hook_target_model(task_type_: str) -> nn.Module:
+                # For embedding, we hook on the LM-head model because embedding outputs are typically
+                # produced from `output.logits` by `patch_output_normalizer` (registered on LM-head model).
+                if task_type_ == 'embedding':
+                    return get_lm_head_model(self.model, model_meta=self.model.model_meta)
+                return get_llm_model(self.model, model_meta=self.model.model_meta)
+
+            # --- seq_cls / reranker / generative_reranker / embedding unified pipeline ---
+            if task_type in {'seq_cls', 'reranker', 'generative_reranker', 'embedding'}:
+                llm_model = _get_hook_target_model(task_type)
+
+                hooks: List[Callable] = []
+
+                if sp_enabled:
+
+                    def sp_gather_hook(module, args, input, output):
+                        return gather_sequence_parallel_outputs(output)
+
+                    hooks.append(sp_gather_hook)
+
+                if pf_enabled:
+                    if sp_enabled:
+
+                        def revert_padding_free_hook(module, args, input, output):
+                            # Use full packed position ids cached by sequence_parallel.prepare_inputs
+                            position_ids = sequence_parallel.real_position_ids
+                            tmp_input = {'position_ids': position_ids}
+                            return revert_padding_free(output, tmp_input, padding_side)
+                    else:
+
+                        def revert_padding_free_hook(module, args, input, output):
+                            return revert_padding_free(output, input, padding_side)
+
+                    hooks.append(revert_padding_free_hook)
+
+                if hooks:
+                    _register_llm_hooks_in_order(llm_model, hooks)
+
+                # wrappers for seq_cls / reranker (pooling/head must see gathered/reverted outputs)
+                if task_type in {'seq_cls', 'reranker'} and (sp_enabled or pf_enabled):
+                    lm_head_model = get_lm_head_model(self.model, model_meta=self.model.model_meta)
+
+                    if task_type == 'seq_cls':
+
+                        @wraps(model.forward.__func__)
+                        def seq_cls_forward(model, *args, **kwargs):
+                            sp_kwargs = dict(kwargs)
+
+                            def inner_forward(*args, **_kwargs):
+                                return llm_model(*args, **_kwargs)
+
+                            return transformers_seq_cls_forward(
+                                lm_head_model,
+                                *args,
+                                origin_forward=inner_forward,
+                                padding_side=padding_side,
+                                **sp_kwargs,
+                            )
+
+                        model.forward = MethodType(seq_cls_forward, model)
+                    else:
+
+                        @wraps(model.forward.__func__)
+                        def reranker_forward(model, *args, **kwargs):
+                            sp_kwargs = dict(kwargs)
+
+                            def inner_forward(*args, **_kwargs):
+                                return llm_model(*args, **_kwargs)
+
+                            padding_free_fn = getattr(model, 'padding_free_fn', None)
+                            if callable(padding_free_fn):
+                                output = inner_forward(*args, **sp_kwargs)
+                                return padding_free_fn(output, sp_kwargs, padding_side)
+
+                            return transformers_seq_cls_forward(
+                                lm_head_model,
+                                *args,
+                                origin_forward=inner_forward,
+                                padding_side=padding_side,
+                                **sp_kwargs,
+                            )
+
+                        model.forward = MethodType(reranker_forward, model)
+
     def _fix_gradient_checkpointing(self):
         # fix use_reentrant
         if hasattr(torch.utils.checkpoint, '_old_checkpoint'):  # avoid double patching
@@ -617,7 +831,6 @@ class SwiftMixin:
             pass
 
     def _prepare_gradient_checkpointing(self, model) -> None:
-        from swift.llm import HfConfigFactory, deep_getattr, dynamic_gradient_checkpointing
         args = self.args
         HfConfigFactory.set_model_config_attr(model, 'use_cache', False)
         if args.gradient_checkpointing or args.vit_gradient_checkpointing:
@@ -643,8 +856,8 @@ class SwiftMixin:
                         else:
                             vision_tower.gradient_checkpointing_disable()
                             vision_tower.disable_input_require_grads()
-                    except (NotImplementedError, AttributeError):
-                        pass
+                    except (NotImplementedError, AttributeError) as e:
+                        logger.warning(f'prepare gradient_checkpointing failed: {e}')
         # Avoid vit_gradient_checkpointing being overwritten by transformers.Trainer.gradient_checkpointing_enable.
         self.args.gradient_checkpointing = False
 
@@ -682,11 +895,19 @@ class SwiftMixin:
         with self.hub.patch_hub():
             return super().push_to_hub(*args, **kwargs)
 
-    def log(self, logs: dict[str, float], *args, **kwargs) -> None:
-        mode = 'train' if self.model.training else 'eval'
-        for k, metric in self.custom_metrics[mode].items():
-            if mode == 'eval':
-                k = f'eval_{k}'
+    @staticmethod
+    def compute_custom_metrics(metrics, key_prefix: str = ''):
+        logs = {}
+        # Synchronize keys to avoid getting stuck.
+        if dist.is_initialized():
+            all_keys = [None] * dist.get_world_size()
+            dist.all_gather_object(all_keys, list(metrics.keys()))
+            for key in set().union(*all_keys):
+                if key not in metrics:
+                    metrics[key]
+
+        for k, metric in sorted(metrics.items()):
+            k = f'{key_prefix}{k}'
             value = metric.compute()
             metric.reset()
             if isinstance(value, dict):
@@ -702,6 +923,13 @@ class SwiftMixin:
         for k in list(logs.keys()):
             if logs[k] is None:
                 logs.pop(k)
+        return logs
+
+    def log(self, logs: Dict[str, float], *args, **kwargs) -> None:
+        mode = 'train' if self.model.training else 'eval'
+        metrics = self.custom_metrics[mode]
+        prefix = 'eval_' if mode == 'eval' else ''
+        logs.update(self.compute_custom_metrics(metrics, prefix))
         return super().log(logs, *args, **kwargs)
 
     def _maybe_log_save_evaluate(self, tr_loss, *args, **kwargs):
@@ -724,58 +952,122 @@ class SwiftMixin:
             self.log(logs)
 
         if self.args.eval_use_evalscope and self.control.should_evaluate:
-            self._evalscope_eval()
+            try:
+                self._evalscope_eval()
+            except Exception as e:
+                logger.warning(f'Failed to call EvalScope evaluation function: {e}.')
+
             if not self.eval_dataset:
                 self.control.should_evaluate = False
         super()._maybe_log_save_evaluate(tr_loss, *args, **kwargs)
 
-    def create_loss_and_metric(self, args):
+    def create_loss_and_eval_metric(self, args):
         res = {}
-        if args.metric is not None:
-            res['compute_metrics'], res['preprocess_logits_for_metrics'] = get_metric(args.metric)
+        if args.eval_metric is not None:
+            eval_metric = eval_metrics_map[args.eval_metric](args, self)
+            res['compute_metrics'], res['preprocess_logits_for_metrics'] = (eval_metric.compute_metrics,
+                                                                            eval_metric.preprocess_logits_for_metrics)
         if args.loss_type is not None:
-            res['compute_loss_func'] = get_loss_func(args.loss_type)
+            res['compute_loss_func'] = loss_map[args.loss_type](args, self)
         return res
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
-        if self.args.optimizer is not None:
-            from swift.plugin import optimizers_map
-            optimizer_callback = optimizers_map[self.args.optimizer]
-            self.optimizer, self.lr_scheduler = optimizer_callback(self.args, self.model, self.train_dataset)
-            if self.optimizer is None:
-                self.create_optimizer()
-            if self.lr_scheduler is None:
-                self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer)
-        else:
-            super().create_optimizer_and_scheduler(num_training_steps=num_training_steps)
+        optimizer_callback: OptimizerCallback = optimizers_map[self.args.optimizer or 'default'](self.args, self)
+        optimizer_callback.create_optimizer_and_scheduler(num_training_steps)
 
-    def _compute_acc(self, outputs, labels) -> None:
+    @staticmethod
+    def _get_listwise_reranker_preds(logits, labels):
+        positive_indices = torch.nonzero(labels == 1, as_tuple=False).squeeze(-1).tolist()
+        positive_indices.append(labels.shape[0])
+        preds = []
+        for i in range(len(positive_indices) - 1):
+            start, end = positive_indices[i], positive_indices[i + 1]
+            preds.append(logits[start:end].argmax())
+        preds = torch.tensor(preds)
+        labels = torch.tensor([0] * (len(positive_indices) - 1))
+        return preds, labels
+
+    def _compute_acc(self, outputs, labels, cu_seqlens=None) -> None:
         args = self.args
-        preds = outputs.logits.argmax(dim=-1)
-        metrics = compute_acc(
-            preds, labels, acc_strategy=args.acc_strategy, is_encoder_decoder=self.template.is_encoder_decoder)
-        mode = 'train' if self.model.training else 'eval'
-        for k, v in metrics.items():
-            self.custom_metrics[mode][k].update(v)
+        logits = outputs.logits
+        metrics = None
+        task_type = self.task_type
+        problem_type = self.problem_type
+        if task_type == 'embedding':
+            return
+        elif task_type == 'seq_cls':
+            if problem_type == 'regression':
+                return
+            elif problem_type == 'multi_label_classification':
+                preds = logits.sigmoid() > 0.5
+                metrics = {'acc': (labels == preds).all(dim=-1)}
+            else:
+                preds = logits.argmax(dim=-1)
+                metrics = compute_acc(preds, labels)
+        elif task_type == 'causal_lm':
+            preds = logits.argmax(dim=-1)
+            if self.template.sequence_parallel_size > 1:
+                # Gather preds and labels across the sp group
+                if isinstance(preds, np.ndarray):
+                    preds = torch.from_numpy(preds).to(get_current_device())
+                if isinstance(labels, np.ndarray):
+                    labels = torch.from_numpy(labels).to(get_current_device())
+                assert labels.shape[1] == preds.shape[1]
+
+                if sequence_parallel.rp_world_size > 1:
+                    position_ids = sequence_parallel.real_position_ids
+                    position_ids = sequence_parallel.pad(position_ids, padding_value=-1, position_ids=position_ids)
+                else:
+                    position_ids = None
+                preds_output = sequence_parallel.gather(preds, dim=1, position_ids=position_ids)
+                labels_output = sequence_parallel.gather(labels, dim=1, position_ids=position_ids)
+                # roll back to fit compute_acc
+                labels_output = torch.roll(labels_output, shifts=1, dims=1)
+                preds = preds_output
+                labels = labels_output.int()
+
+            metrics = compute_acc(
+                preds,
+                labels,
+                acc_strategy=args.acc_strategy,
+                is_encoder_decoder=self.template.is_encoder_decoder,
+                cu_seqlens=cu_seqlens)
+        elif task_type in {'generative_reranker', 'reranker'}:
+            if logits.dim() == 2:
+                logits = logits.squeeze(-1)
+            if args.loss_type == 'listwise_reranker':
+                preds, labels = self._get_listwise_reranker_preds(logits, labels)
+            else:
+                preds = (logits > 0).long()
+            metrics = compute_acc(preds, labels.long())
+        if metrics:
+            mode = 'train' if self.model.training else 'eval'
+            for k, v in metrics.items():
+                self.custom_metrics[mode][k].update(v)
 
     @torch.no_grad()
     def _evalscope_eval(self):
-        from ..llm.eval.utils import EvalModel
+        from ..pipelines.eval.utils import EvalModel
         from evalscope import TaskConfig, run_task
-        from evalscope.constants import EvalType
 
         self.model.eval()
-        max_batch_size = self.args.per_device_eval_batch_size
-        custom_model = EvalModel(
-            self.model, self.template, max_batch_size=max_batch_size, model_name=f'model-step{self.state.global_step}')
+        template = copy(self.template)
+        template.packing = False
+        template.padding_free = False
+        # prepare task config
         task_config_kwargs = dict(
-            model=custom_model,
-            eval_type=EvalType.CUSTOM,
+            model=EvalModel(
+                model_name=f'model-step{self.state.global_step}',
+                model=self.model,
+                template=template,
+                max_batch_size=self.args.per_device_eval_batch_size,
+            ),
+            eval_type='swift_custom',
             datasets=self.args.eval_dataset,
             dataset_args=self.args.eval_dataset_args,
             limit=self.args.eval_limit,
             work_dir=os.path.join(self.args.output_dir, 'eval'),
-            eval_batch_size=max_batch_size,
+            eval_batch_size=self.args.per_device_eval_batch_size,
             generation_config=self.args.eval_generation_config or {'max_tokens': 512},
         )
         task_config_kwargs.update(self.args.extra_eval_args or {})
@@ -792,6 +1084,8 @@ class SwiftMixin:
     def prepare_logits_to_keep(self, inputs):
         labels = inputs['labels']
         loss_scale = inputs.get('loss_scale')
+        if self.template.sequence_parallel_size > 1:
+            raise NotImplementedError()
         if labels.shape[0] == 1 and not is_mp():
             # device_map may encounter device mismatch issues.
             loss_mask = (labels != -100)[0]
@@ -811,31 +1105,15 @@ class SwiftMixin:
         inputs['logits_to_keep'] = logits_to_keep
 
     def get_cu_seqlens(self, position_ids, logits_to_keep) -> torch.Tensor:
-        from swift.llm import get_packed_seq_params
-        cu_seqlens = get_packed_seq_params(position_ids)['cumulative_seqlens_q']
+        cu_seqlens = get_packed_seq_params(position_ids)['cu_seq_lens_q']
         res_cu_seqlens = cu_seqlens.clone()
         if isinstance(logits_to_keep, torch.Tensor):
             for i in range(cu_seqlens.shape[0] - 1):
                 start, end = cu_seqlens[i], cu_seqlens[i + 1]
                 res_cu_seqlens[i + 1:] -= (~logits_to_keep[start:end]).sum()
         elif isinstance(logits_to_keep, int):
-            res_cu_seqlens[1:] -= position_ids.shape[0] + 1 - logits_to_keep
+            res_cu_seqlens[1:] -= position_ids.shape[-1] + 1 - logits_to_keep
         return res_cu_seqlens
-
-    def get_batch_samples(self, *args, **kwargs):
-        res = super().get_batch_samples(*args, **kwargs)
-        from swift.trainers.sequence_parallel import sequence_parallel
-        if (self.template.sequence_parallel_size == 1 or 'Ulysses' == sequence_parallel.__class__.__name__
-                or 'RingAttention' == sequence_parallel.__class__.__name__):
-            # ulysses and ring attention split inputs in the model hook, so no need to gather num_items_in_batch
-            return res
-
-        batch_samples, num_items_in_batch = res
-        if num_items_in_batch is None:
-            num_items_in_batch = torch.tensor(0).to(args[2])
-        from swift.trainers.sequence_parallel import sequence_parallel
-        dist.all_reduce(num_items_in_batch, dist.ReduceOp.SUM, sequence_parallel.sp_group)
-        return batch_samples, num_items_in_batch
 
     @contextmanager
     def _patch_skip_first_batches(self):
@@ -858,12 +1136,52 @@ class SwiftMixin:
 
 class DataLoaderMixin:
 
+    def get_sp_dataloader(self, dataset, batch_size, skip_batches=0):
+
+        data_collator = self.data_collator
+        if isinstance(dataset, datasets.Dataset):
+            dataset = self._remove_unused_columns(dataset, description='training')
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description='training')
+        if hasattr(dataset, '__len__'):
+            sampler = SequenceParallelSampler(sequence_parallel, dataset, seed=42)
+            dataloader_params = {
+                'batch_size': batch_size,
+                'collate_fn': data_collator,
+                'num_workers': self.args.dataloader_num_workers,
+                'pin_memory': self.args.dataloader_pin_memory,
+                'persistent_workers': self.args.dataloader_persistent_workers,
+            }
+
+            if not isinstance(dataset, torch.utils.data.IterableDataset):
+                if skip_batches > 0:
+                    from accelerate.data_loader import SkipBatchSampler
+                    sampler = SkipBatchSampler(sampler, skip_batches=skip_batches * batch_size)
+                dataloader_params['sampler'] = sampler
+                dataloader_params['drop_last'] = self.args.dataloader_drop_last
+                dataloader_params['worker_init_fn'] = partial(
+                    seed_worker, num_workers=self.args.dataloader_num_workers, rank=sequence_parallel.dp_rank)
+
+            return DataLoaderShard(dataset, device=self.accelerator.device, **dataloader_params)
+        else:
+            dataloader_params = {
+                'collate_fn': data_collator,
+                'num_workers': self.args.dataloader_num_workers,
+                'pin_memory': self.args.dataloader_pin_memory,
+                'persistent_workers': self.args.dataloader_persistent_workers,
+                'prefetch_factor': self.args.dataloader_prefetch_factor
+            }
+            if dist.is_initialized() and dataloader_params['prefetch_factor']:
+                dataloader_params['prefetch_factor'] = dataloader_params['prefetch_factor'] * dist.get_world_size()
+            dataloader = DataLoader(dataset, batch_size=batch_size, **dataloader_params)
+            dataloader = SequenceParallelDispatcher(
+                dataloader, sequence_parallel, self.accelerator.device, skip_batches=skip_batches)
+            return dataloader
+
     def get_train_dataloader(self, skip_batches=0):
         dataloader = None
         if self.template.sequence_parallel_size > 1:
-            from swift.trainers.sequence_parallel import sequence_parallel
-            dataloader = sequence_parallel.get_dataloader(
-                self, self.train_dataset, self._train_batch_size, skip_batches=skip_batches)
+            dataloader = self.get_sp_dataloader(self.train_dataset, self._train_batch_size, skip_batches=skip_batches)
         if dataloader is None:
             # Higher efficiency
             if self.train_dataset is None:
@@ -891,6 +1209,9 @@ class DataLoaderMixin:
             }
 
             if hasattr(train_dataset, '__len__'):
+                if args.group_by_length:
+                    batch_sampler_params['group_by_length'] = args.group_by_length
+                    batch_sampler_params['lengths'] = train_dataset['lengths']
                 batch_sampler = BatchSamplerShard(
                     len(train_dataset), batch_size=self._train_batch_size, **batch_sampler_params)
                 dataloader_params['worker_init_fn'] = partial(
@@ -908,14 +1229,23 @@ class DataLoaderMixin:
                 dataloader = DataLoaderDispatcher(dataloader, self.accelerator.device, skip_batches=skip_batches)
         return dataloader
 
+    @contextmanager
+    def _disable_group_by_length(self):
+        group_by_length = getattr(self.args, 'group_by_length', False)
+        self.args.group_by_length = False
+        try:
+            yield
+        finally:
+            self.args.group_by_length = group_by_length
+
     def get_eval_dataloader(self, eval_dataset=None):
         dataloader = None
         if self.template.sequence_parallel_size > 1:
-            from swift.trainers.sequence_parallel import sequence_parallel
             if eval_dataset is None and self.eval_dataset is None:
                 raise ValueError('Trainer: evaluation requires an eval_dataset.')
             eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
-            dataloader = sequence_parallel.get_dataloader(self, eval_dataset, self.args.eval_batch_size)
+            dataloader = self.get_sp_dataloader(eval_dataset, self.args.eval_batch_size)
         if dataloader is None:
-            return super().get_eval_dataloader(eval_dataset=eval_dataset)
+            with self._disable_group_by_length():
+                return super().get_eval_dataloader(eval_dataset=eval_dataset)
         return dataloader

@@ -4,6 +4,7 @@ GRPOTrainer在ms-swift3.5进行了代码重构，如果你使用的swift版本<3
 
 [GRPO(Group Relative Policy Optimization)](https://arxiv.org/abs/2402.03300) 算法利用组内相对优势计算来替代 PPO 算法中独立的价值模型，并直接在损失函数中加入 KL 散度惩罚来提高训练稳定性。
 
+## 算法原理
 
 GRPO 目标函数
 
@@ -109,7 +110,7 @@ optimizer.step()
 
 训练脚本示例参考[examples](https://github.com/modelscope/ms-swift/tree/main/examples/train/grpo)
 
-GROP参数参考[文档](../../../Instruction/命令行参数.md#grpo参数)
+GRPO参数参考[文档](../../../Instruction/Command-line-parameters.md#grpo参数)
 
 ## 集群支持
 
@@ -158,6 +159,12 @@ GRPO 训练框架支持集成高性能推理引擎（如 vLLM）来加速采样�
 --move_model_batches [批次数量]
 ```
 
+6. 将 Megatron 导出的用于 vLLM 更新的 HF 格式权重存放在 CPU 主存中，以降低 GPU 显存占用：
+
+```bash
+--offload_bridge true
+```
+
 ### 2. Async(External) Mode
 
 训练与推理资源分离，启动单独的推理服务器
@@ -183,9 +190,9 @@ swift rollout \
   --vllm_data_parallel_size 2
 ```
 
-更多 rollout 参数参考[vLLM参数](../../../Instruction/命令行参数.md#vllm参数)和[rollout 参数](../../../Instruction/命令行参数.md#rollout参数)
+更多 rollout 参数参考[vLLM参数](../../../Instruction/Command-line-parameters.md#vllm参数)和[rollout 参数](../../../Instruction/Command-line-parameters.md#rollout参数)
 
-注意：在使用 use_async_engine 时，仅开启 DP 可能会导致错误，相关问题参考： [vllm issue](https://github.com/vllm-project/vllm/issues/18567)。如果出现错误，请尝试同时启用 TP 和 DP。
+注意：在使用 use_async_engine 时，仅开启 DP 可能会导致错误，相关问题参考： [vllm issue](https://github.com/vllm-project/vllm/issues/18567)。如果出现错误，请尝试同时启用 TP 和 DP，或升级vLLM
 
 
 训练使用以下参数配置外部 vLLM 服务器
@@ -196,6 +203,30 @@ swift rollout \
 --vllm_server_port <服务端口> \
 --vllm_server_timeout <超时时间> \
 ```
+#### 权重同步加速
+swift 3.10 优化了权重同步，设置以下参数可以进一步优化 LoRA 训练的权重同步速度。
+
+```bash
+# rollout(server mode)
+swift rollout \
+    --vllm_enable_lora true \
+    --vllm_max_lora_rank xxx # 与训练脚本lora_rank一致
+    ...
+
+# grpo(colocate mode)
+swift rlhf \
+    --rlhf_type grpo \
+    --vllm_mode colocate \
+    --vllm_enable_lora true \
+    ...
+```
+
+注意：以下情况无法使用该优化：
+
+- 训练多模态模型的ViT层(freeze_vit false)
+- MoE 模型
+
+优化实现细节请参考该[PR](https://github.com/modelscope/ms-swift/pull/5773)
 
 ## logged metrics
 - completions/mean_length：生成的 completion 的平均长度。
@@ -227,6 +258,20 @@ swift rollout \
 如果设置了`top_entropy_quantile`参数<1.0, 则会记录entropy threshold的值
 - entropy/threshold: 分位点处的 entropy 值，小于该值的 token 将不会被计算 loss
 
+训推一致性指标，前缀为rollout_correction (ms-swift>=3.11)，需设置`log_rollout_offpolicy_metrics=true`或`rollout_importance_sampling_mode`：
+- `kl` / `k3_kl`：训练策略与 rollout 策略之间的 KL 散度（直接估计器 / K3 估计器）
+- `training_ppl` / `rollout_ppl`：训练策略和 rollout 策略的困惑度
+- `log_ppl_diff`：log PPL 差异，反映分布偏移程度
+- `ppl_ratio`：PPL 比率
+- `chi2_token` / `chi2_seq`：Token/Sequence 级别的 χ² 散度
+
+IS 校正指标（需设置`rollout_importance_sampling_mode`）：
+- `is_weight_mean`：平均重要性采样权重
+- `ess`：有效样本大小（Effective Sample Size）
+- `clipped_frac`：被截断或屏蔽的样本比例
+
+> 训推一致性指标详细说明请参考文档 [Training-Inference-Mismatch](../AdvancedResearch/training_inference_mismatch.md)
+
 如果设置了`log_completions`, 将保存训练动态在output对应文件夹中，包括
 - step：记录时的训练步数
 - prompt：模型输入
@@ -234,7 +279,13 @@ swift rollout \
 - {reward_func_name}：特定奖励
 - entropy：entropy token 均值，在设置`log_entropy`时记录
 
-设置 `report_to wandb/swanlab` 将训练动态推送到对应的平台
+设置 `report_to wandb/swanlab` 将训练动态Table推送到对应的平台
+
+如果需要在Table中额外记录其他列，请在 `GRPOTrainer._generate_and_score_completions` 方法中，设置 metrics_to_gather 字典。
+
+默认自动检测
+- `image`：视觉数据集图像输入。(暂时只支持wandb)
+- `solution`：数据集中的 solution 列。
 
 ## FAQ
 **1. 训练过程中 loss 等于0 / 接近0 / 小于0**
@@ -285,7 +336,7 @@ num_processes * per_device_eval_batch_size
 
 参考[issue](https://github.com/modelscope/ms-swift/issues/3912)
 
-**5. clip_ratio为什么总是1?**
+**5. clip_ratio为什么总是0?**
 
 Clip机制的核心目的是限制策略更新的幅度，防止因单次更新过大而导致策略性能崩溃（即策略更新后表现急剧下降）。
 Clip操作的具体公式如下：
@@ -337,3 +388,8 @@ gradient_accumulation_steps = 8
 **9. 如何取消 KL 项损失**
 
 将参数设置为 `--beta 0`，即可关闭 KL 损失的计算，并且不会加载参考模型（ref model）。
+
+
+## RL微信群
+
+<img src="https://raw.githubusercontent.com/modelscope/ms-swift/main/docs/resources/wechat/grpo.png" width="250">

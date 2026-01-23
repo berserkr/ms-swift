@@ -9,9 +9,10 @@ MASTER_PORT=29500 \
 NPROC_PER_NODE=$nproc_per_node \
 swift sft \
     --model Qwen/Qwen2.5-7B-Instruct \
-    --train_type full \
+    --tuner_type full \
     --dataset 'AI-ModelScope/alpaca-gpt4-data-zh#20000' \
               'AI-ModelScope/alpaca-gpt4-data-en#20000' \
+    --load_from_cache_file true \
     --split_dataset_ratio 0.01 \
     --torch_dtype bfloat16 \
     --num_train_epochs 1 \

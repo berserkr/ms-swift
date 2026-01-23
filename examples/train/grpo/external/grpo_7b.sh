@@ -14,9 +14,10 @@ swift rlhf \
     --vllm_mode server \
     --vllm_server_host 127.0.0.1 \
     --vllm_server_port 8000 \
-    --train_type full \
+    --tuner_type full \
     --torch_dtype bfloat16 \
     --dataset AI-MO/NuminaMath-TIR#1000 \
+    --load_from_cache_file true \
     --split_dataset_ratio 0 \
     --max_completion_length 2048 \
     --num_train_epochs 3 \

@@ -1,6 +1,7 @@
 from typing import Any, List
 
-from swift.llm import MODEL_MAPPING, TEMPLATE_MAPPING, ModelType, TemplateType
+from swift.model import MODEL_MAPPING, ModelType
+from swift.template import TEMPLATE_MAPPING, TemplateType
 from swift.utils import is_megatron_available
 
 
@@ -22,13 +23,16 @@ def get_cache_mapping(fpath):
             continue
         items = text.split('|')
         if len(items) < 6:
-            break
+            continue
         cache_mapping[items[1]] = items[5]
     return cache_mapping
 
 
 def get_model_info_table():
-    fpaths = ['docs/source/Instruction/支持的模型和数据集.md', 'docs/source_en/Instruction/Supported-models-and-datasets.md']
+    fpaths = [
+        'docs/source/Instruction/Supported-models-and-datasets.md',
+        'docs/source_en/Instruction/Supported-models-and-datasets.md'
+    ]
     cache_mapping = get_cache_mapping(fpaths[0])
     end_words = [['### 多模态大模型', '## 数据集'], ['### Multimodal large models', '## Datasets']]
     result = [
@@ -39,13 +43,13 @@ def get_model_info_table():
     ] * 2
     res_llm: List[Any] = []
     res_mllm: List[Any] = []
-    mg_count = 0
+    mg_count_llm = 0
+    mg_count_mllm = 0
     for template in TemplateType.get_template_name_list():
         assert template in TEMPLATE_MAPPING
 
     for model_type in ModelType.get_model_name_list():
         model_meta = MODEL_MAPPING[model_type]
-        template = model_meta.template
         for group in model_meta.model_groups:
             for model in group.models:
                 ms_model_id = model.ms_model_id
@@ -60,24 +64,32 @@ def get_model_info_table():
                     hf_model_id = '-'
                 tags = ', '.join(group.tags or model_meta.tags) or '-'
                 requires = ', '.join(group.requires or model_meta.requires) or '-'
+                template = group.template or model_meta.template
                 if is_megatron_available():
                     from swift.megatron import model
                     support_megatron = getattr(model_meta, 'support_megatron', False)
-                    for word in ['gptq', 'awq', 'bnb', 'aqlm', 'int4', 'int8', 'nf4', 'fp8']:
+                    for word in ['gptq', 'awq', 'bnb', 'aqlm', 'int4', 'int8', 'nf4']:
                         if word in ms_model_id.lower():
                             support_megatron = False
                             break
+                    if support_megatron and 'fp8' in ms_model_id.lower() and not any(
+                            word in ms_model_id.lower() for word in ['qwen', 'longcat', 'intern']):
+                        support_megatron = False
                     support_megatron = '&#x2714;' if support_megatron else '&#x2718;'
                 else:
                     support_megatron = cache_mapping.get(ms_model_id, '&#x2718;')
                 if support_megatron == '&#x2714;':
-                    mg_count += 1
+                    if model_meta.is_multimodal:
+                        mg_count_mllm += 1
+                    else:
+                        mg_count_llm += 1
                 r = f'|{ms_model_id}|{model_type}|{template}|{requires}|{support_megatron}|{tags}|{hf_model_id}|\n'
                 if model_meta.is_multimodal:
                     res_mllm.append(r)
                 else:
                     res_llm.append(r)
-    print(f'LLM总数: {len(res_llm)}, MLLM总数: {len(res_mllm)}, Megatron支持模型: {mg_count}')
+    print(f'LLM总数: {len(res_llm)}, MLLM总数: {len(res_mllm)}')
+    print(f'[Megatron] LLM总数: {mg_count_llm}, MLLM总数: {mg_count_mllm}')
     text = ['', '']  # llm, mllm
     for i, res in enumerate([res_llm, res_mllm]):
         for r in res:

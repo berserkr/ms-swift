@@ -10,7 +10,7 @@ SWIFT's eval capability utilizes the EvalScope evaluation framework from the Mag
 
 Currently, we support the evaluation process of **standard evaluation datasets** as well as the evaluation process of **user-defined** evaluation datasets. The **standard evaluation datasets** are supported by three evaluation backends:
 
-Below are the names of the supported datasets. For detailed information on the datasets, please refer to [all supported datasets](https://evalscope.readthedocs.io/en/latest/get_started/supported_dataset.html).
+Below are the names of the supported datasets. For detailed information on the datasets, please refer to [all supported datasets](https://evalscope.readthedocs.io/en/latest/get_started/supported_dataset/index.html).
 
 1. Native (default):
 
@@ -75,14 +75,14 @@ CUDA_VISIBLE_DEVICES=0 \
 swift eval \
     --model Qwen/Qwen2.5-0.5B-Instruct \
     --eval_backend Native \
-    --infer_backend pt \
+    --infer_backend transformers \
     --eval_limit 10 \
     --eval_dataset gsm8k
 ```
 Where:
 - model: Can specify a local model path or a model ID on modelscope
 - eval_backend: Options are Native, OpenCompass, VLMEvalKit; default is Native
-- infer_backend: Options are pt, vllm, sglang, lmdeploy; default is pt
+- infer_backend: Options are transformers, vllm, sglang, lmdeploy; default is transformers
 - eval_limit: Sample size for each evaluation set; default is None, which means using all data; can be used for quick validation
 - eval_dataset: Evaluation dataset(s); multiple datasets can be set, separated by spaces
 
@@ -93,10 +93,10 @@ CUDA_VISIBLE_DEVICES=0 \
 swift eval \
     --model Qwen/Qwen2.5-0.5B-Instruct \
     --eval_backend Native \
-    --infer_backend pt \
+    --infer_backend transformers \
     --eval_limit 10 \
     --eval_dataset gsm8k \
-    --dataset_args '{"gsm8k": {"few_shot_num": 0, "filters": {"remove_until": "</think>"}}}' \
+    --eval_dataset_args '{"gsm8k": {"few_shot_num": 0, "filters": {"remove_until": "</think>"}}}' \
     --eval_generation_config '{"max_tokens": 512, "temperature": 0}' \
     --extra_eval_args '{"ignore_errors": true, "debug": true}'
 ```
@@ -113,7 +113,7 @@ SWIFT supports using EvalScope to evaluate the current model during the training
 CUDA_VISIBLE_DEVICES=0 \
 swift sft \
   --model "Qwen/Qwen2.5-0.5B-Instruct" \
-  --train_type "lora" \
+  --tuner_type "lora" \
   --dataset "AI-ModelScope/alpaca-gpt4-data-zh#100" \
   --torch_dtype "bfloat16" \
   --num_train_epochs "1" \
@@ -189,14 +189,14 @@ CUDA_VISIBLE_DEVICES=0 \
 swift eval \
     --model Qwen/Qwen2.5-0.5B-Instruct \
     --eval_backend Native \
-    --infer_backend pt \
+    --infer_backend transformers \
     --eval_dataset general_mcq \
-    --dataset_args '{"general_mcq": {"local_path": "/path/to/mcq", "subset_list": ["example"]}}'
+    --eval_dataset_args '{"general_mcq": {"local_path": "/path/to/mcq", "subset_list": ["example"]}}'
 ```
 
 Where:
 - `eval_dataset` should be set to `general_mcq`
-- `dataset_args` should be set with:
+- `eval_dataset_args` should be set with:
     - `local_path` as the path to the custom dataset folder
     - `subset_list` as the name of the evaluation dataset, taken from the `*_dev.csv` mentioned above
 
@@ -239,14 +239,14 @@ CUDA_VISIBLE_DEVICES=0 \
 swift eval \
     --model Qwen/Qwen2.5-0.5B-Instruct \
     --eval_backend Native \
-    --infer_backend pt \
+    --infer_backend transformers \
     --eval_dataset general_qa \
-    --dataset_args '{"general_qa": {"local_path": "/path/to/qa", "subset_list": ["example"]}}'
+    --eval_dataset_args '{"general_qa": {"local_path": "/path/to/qa", "subset_list": ["example"]}}'
 ```
 
 Where:
 - `eval_dataset` should be set to `general_qa`
-- `dataset_args` is a JSON string that needs to be set with:
+- `eval_dataset_args` is a JSON string that needs to be set with:
     - `local_path` as the path to the custom dataset folder
     - `subset_list` as the name of the evaluation dataset, taken from the `*.jsonl` mentioned above
 

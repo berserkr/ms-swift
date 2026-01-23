@@ -1,4 +1,4 @@
-# Copyright (c) Alibaba, Inc. and its affiliates.
+# Copyright (c) ModelScope Contributors. All rights reserved.
 import os
 import re
 import sys
@@ -9,17 +9,16 @@ from typing import Type
 
 import gradio as gr
 import json
-import torch
 from json import JSONDecodeError
 from transformers.utils import is_torch_cuda_available, is_torch_npu_available
 
-from swift.llm import EvalArguments
-from swift.ui.base import BaseUI
-from swift.ui.llm_eval.eval import Eval
-from swift.ui.llm_eval.model import Model
-from swift.ui.llm_eval.runtime import EvalRuntime
-from swift.ui.llm_train.llm_train import run_command_in_background_with_popen
+from swift.arguments import EvalArguments
 from swift.utils import get_device_count
+from ..base import BaseUI
+from ..llm_train import run_command_in_background_with_popen
+from .eval import Eval
+from .model import Model
+from .runtime import EvalRuntime
 
 
 class LLMEval(BaseUI):
@@ -135,7 +134,8 @@ class LLMEval(BaseUI):
         kwargs.update(more_params)
         model = kwargs.get('model')
         if model and os.path.exists(model) and os.path.exists(os.path.join(model, 'args.json')):
-            kwargs['ckpt_dir'] = kwargs.pop('model')
+            if os.path.exists(os.path.join(model, 'adapter_config.json')):
+                kwargs['adapters'] = kwargs.pop('model')
 
         eval_args = EvalArguments(
             **{
@@ -148,20 +148,20 @@ class LLMEval(BaseUI):
         for e in kwargs:
             if isinstance(kwargs[e], list):
                 params += f'--{e} {cls.quote}{sep.join(kwargs[e])}{cls.quote} '
-                command.extend([f'--{e}', f'{" ".join(kwargs[e])}'])
+                command.extend([f'--{e}'] + kwargs[e])
             elif e in kwargs_is_list and kwargs_is_list[e]:
                 all_args = [arg for arg in kwargs[e].split(' ') if arg.strip()]
                 params += f'--{e} {cls.quote}{sep.join(all_args)}{cls.quote} '
-                command.extend([f'--{e}', f'{" ".join(all_args)}'])
+                command.extend([f'--{e}'] + all_args)
             else:
                 params += f'--{e} {cls.quote}{kwargs[e]}{cls.quote} '
                 command.extend([f'--{e}', f'{kwargs[e]}'])
         if more_params_cmd != '':
             params += f'{more_params_cmd.strip()} '
-            more_params_cmd = more_params_cmd.split('--')
+            more_params_cmd = [param.strip() for param in more_params_cmd.split('--')]
             more_params_cmd = [param.split(' ') for param in more_params_cmd if param]
             for param in more_params_cmd:
-                command.extend([f'--{param[0]}', ' '.join(param[1:])])
+                command.extend([f'--{param[0]}'] + param[1:])
         all_envs = {}
         devices = other_kwargs['gpu_id']
         devices = [d for d in devices if d]

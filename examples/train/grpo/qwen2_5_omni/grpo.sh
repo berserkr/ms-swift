@@ -10,12 +10,13 @@ swift rlhf \
     --model Qwen/Qwen2.5-Omni-7B \
     --reward_funcs external_r1v_acc format \
     --reward_weights 1 0.5 \
-    --train_type lora \
+    --tuner_type lora \
     --lora_rank 8 \
     --lora_alpha 32 \
     --target_modules all-linear \
     --torch_dtype bfloat16 \
     --dataset lmms-lab/multimodal-open-r1-8k-verified#1000 \
+    --load_from_cache_file true \
     --external_plugins examples/train/grpo/plugin/plugin.py \
     --max_completion_length 2048 \
     --num_train_epochs 1 \

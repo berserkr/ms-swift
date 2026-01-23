@@ -7,8 +7,9 @@ swift rlhf \
     --rlhf_type dpo \
     --model Qwen/Qwen2.5-VL-7B-Instruct \
     --dataset 'swift/RLAIF-V-Dataset' \
+    --load_from_cache_file true \
     --split_dataset_ratio 0.01 \
-    --train_type full \
+    --tuner_type full \
     --torch_dtype bfloat16 \
     --num_train_epochs 1 \
     --per_device_train_batch_size 1 \
@@ -28,4 +29,5 @@ swift rlhf \
     --dataset_num_proc 64 \
     --attn_impl flash_attn \
     --save_only_model true \
+    --rpo_alpha 0.1 \
     --packing true

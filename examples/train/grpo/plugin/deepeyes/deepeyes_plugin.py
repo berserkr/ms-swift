@@ -12,13 +12,13 @@ import json
 from openai import OpenAI
 from PIL import Image
 
-from swift.plugin.multi_turn import MultiTurnScheduler, multi_turns
-from swift.plugin.orm import ORM, orms
+from swift.rewards.orm import ORM, orms
+from swift.rollout.multi_turn import MultiTurnScheduler, multi_turns
 
 try:
     from math_verify import parse, verify
 except ImportError as e:
-    raise ImportError('please install math_verify by `pip install math_verify==0.5.2`') from e
+    raise ImportError('please install math_verify by `pip install math_verify`') from e
 """
 3 dataset file
     1. data_v0.8_visual_toolbox_v2.parquet:  data_source == 'chart' (vl_agent.compute_score)
@@ -351,11 +351,11 @@ class VisualToolBoxScheduler(MultiTurnScheduler):
                    'Format strictly as:  <think>...</think>  <tool_call>...</tool_call> (if tools needed)'
                    '  <answer>...</answer> ')
 
-    def __init__(self, max_turns=None, *args, **kwargs):
-        super().__init__(max_turns, *args, **kwargs)
+    def __init__(self, infer_engine=None, max_turns=None, *args, **kwargs):
+        super().__init__(infer_engine, max_turns, *args, **kwargs)
 
-    def check_finished(self, infer_request, result, current_turn):
-        should_stop = super().check_finished(infer_request, result, current_turn)
+    def check_finished(self, infer_request, response_choice, current_turn):
+        should_stop = super().check_finished(infer_request, response_choice, current_turn)
         if should_stop:
             return True
 
@@ -368,9 +368,9 @@ class VisualToolBoxScheduler(MultiTurnScheduler):
 
         return True
 
-    def step(self, infer_request, result, current_turn):
+    def step(self, infer_request, response_choice, current_turn):
         from qwen_vl_utils import fetch_image
-        completion = result.message.content
+        completion = response_choice.message.content
         action = extract_action(completion)
         cropped_img = None
         extra_info = {}
@@ -400,8 +400,11 @@ class VisualToolBoxScheduler(MultiTurnScheduler):
         infer_request.messages.append({'role': 'user', 'content': query})
         if cropped_img:
             infer_request.images.append(cropped_img)
+        # override the images
         extra_info['images'] = infer_request.images
-        return infer_request, extra_info
+
+        # Return dictionary format according to new MultiTurnScheduler interface
+        return {'infer_request': infer_request, 'rollout_infos': extra_info}
 
     def validate_bbox(self, left, top, right, bottom):
         assert left < right and bottom > top, f'invalid shape for {left=}, {top=}, {right=}, {bottom=}'

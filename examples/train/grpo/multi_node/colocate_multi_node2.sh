@@ -13,9 +13,10 @@ swift rlhf \
     --vllm_mode colocate \
     --vllm_gpu_memory_utilization 0.5 \
     --vllm_max_model_len 4096 \
-    --train_type full \
+    --tuner_type full \
     --torch_dtype bfloat16 \
     --dataset 'AI-MO/NuminaMath-TIR#5000' \
+    --load_from_cache_file true \
     --max_completion_length 2048 \
     --num_train_epochs 1 \
     --per_device_train_batch_size 1 \

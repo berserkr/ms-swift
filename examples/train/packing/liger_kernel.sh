@@ -1,13 +1,14 @@
 # Env: 4 * A100
-# https://github.com/modelscope/ms-swift/blob/main/examples/train/megatron/long_text.sh
+# https://github.com/modelscope/ms-swift/blob/main/examples/megatron/long_text.sh
 # Max Length: 16K
 # GPU Memory: 4 * 42GB, Training Speed 10s/it
 NPROC_PER_NODE=4 \
 CUDA_VISIBLE_DEVICES=0,1,2,3 \
 swift sft \
     --model Qwen/Qwen2.5-7B \
-    --train_type full \
+    --tuner_type full \
     --dataset 'AI-ModelScope/LongAlpaca-12k' \
+    --load_from_cache_file true \
     --split_dataset_ratio 0.01 \
     --torch_dtype bfloat16 \
     --per_device_train_batch_size 1 \

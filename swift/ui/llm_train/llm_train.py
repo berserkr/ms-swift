@@ -1,4 +1,4 @@
-# Copyright (c) Alibaba, Inc. and its affiliates.
+# Copyright (c) ModelScope Contributors. All rights reserved.
 import collections
 import os
 import re
@@ -6,7 +6,7 @@ import sys
 import time
 from copy import deepcopy
 from functools import partial
-from subprocess import DEVNULL, PIPE, STDOUT, Popen
+from subprocess import PIPE, STDOUT, Popen
 from typing import Dict, Type
 
 import gradio as gr
@@ -14,23 +14,22 @@ import json
 from json import JSONDecodeError
 from transformers.utils import is_torch_cuda_available, is_torch_npu_available
 
-from swift.llm import ExportArguments, RLHFArguments
-from swift.llm.argument.base_args.base_args import get_supported_tuners
-from swift.ui.base import BaseUI
-from swift.ui.llm_train.advanced import Advanced
-from swift.ui.llm_train.dataset import Dataset
-from swift.ui.llm_train.hyper import Hyper
-from swift.ui.llm_train.model import Model
-from swift.ui.llm_train.optimizer import Optimizer
-from swift.ui.llm_train.quantization import Quantization
-from swift.ui.llm_train.report_to import ReportTo
-from swift.ui.llm_train.runtime import Runtime
-from swift.ui.llm_train.save import Save
-from swift.ui.llm_train.self_cog import SelfCog
-from swift.ui.llm_train.task import Task
-from swift.ui.llm_train.tuner import Tuner
-from swift.ui.llm_train.utils import run_command_in_background_with_popen
+from swift.arguments import ExportArguments, RLHFArguments, get_supported_tuners
 from swift.utils import get_device_count, get_logger
+from ..base import BaseUI
+from .advanced import Advanced
+from .dataset import Dataset
+from .hyper import Hyper
+from .model import Model
+from .optimizer import Optimizer
+from .quantization import Quantization
+from .report_to import ReportTo
+from .runtime import Runtime
+from .save import Save
+from .self_cog import SelfCog
+from .task import Task
+from .tuner import Tuner
+from .utils import run_command_in_background_with_popen
 
 logger = get_logger()
 
@@ -111,14 +110,14 @@ class LLMTrain(BaseUI):
                 'en': 'Select GPU to train'
             }
         },
-        'train_type': {
+        'tuner_type': {
             'label': {
                 'zh': '训练方式',
                 'en': 'Train type'
             },
             'info': {
                 'zh': '选择训练的方式',
-                'en': 'Select the training type'
+                'en': 'Select the tuner type'
             }
         },
         'seed': {
@@ -253,7 +252,7 @@ class LLMTrain(BaseUI):
                 with gr.Accordion(elem_id='train_param', open=True):
                     with gr.Row():
                         gr.Dropdown(elem_id='train_stage', choices=['pt', 'sft'], value='sft', scale=4)
-                        gr.Dropdown(elem_id='train_type', scale=4, choices=list(get_supported_tuners()))
+                        gr.Dropdown(elem_id='tuner_type', scale=4, choices=list(get_supported_tuners()))
                         gr.Textbox(elem_id='seed', scale=4)
                         gr.Dropdown(elem_id='torch_dtype', scale=4)
                         gr.Checkbox(elem_id='use_liger_kernel', scale=4)
@@ -293,8 +292,8 @@ class LLMTrain(BaseUI):
                     with gr.Row():
                         gr.Textbox(elem_id='more_params', lines=4, scale=20)
 
-                cls.element('train_type').change(
-                    Hyper.update_lr, inputs=[base_tab.element('train_type')], outputs=[cls.element('learning_rate')])
+                cls.element('tuner_type').change(
+                    Hyper.update_lr, inputs=[base_tab.element('tuner_type')], outputs=[cls.element('learning_rate')])
 
                 submit.click(cls.train_local, list(cls.valid_elements().values()), [
                     cls.element('running_cmd'),
@@ -417,11 +416,11 @@ class LLMTrain(BaseUI):
         for e in kwargs:
             if isinstance(kwargs[e], list):
                 params += f'--{e} {cls.quote}{sep.join(kwargs[e])}{cls.quote} '
-                command.extend([f'--{e}', f'{" ".join(kwargs[e])}'])
+                command.extend([f'--{e}'] + kwargs[e])
             elif e in kwargs_is_list and kwargs_is_list[e]:
                 all_args = [arg for arg in kwargs[e].split(' ') if arg.strip()]
                 params += f'--{e} {cls.quote}{sep.join(all_args)}{cls.quote} '
-                command.extend([f'--{e}', f'{" ".join(all_args)}'])
+                command.extend([f'--{e}'] + all_args)
             else:
                 params += f'--{e} {cls.quote}{kwargs[e]}{cls.quote} '
                 command.extend([f'--{e}', f'{kwargs[e]}'])
@@ -434,10 +433,10 @@ class LLMTrain(BaseUI):
         more_params_cmd = more_params_cmd.strip()
         if more_params_cmd != '':
             params += f'{more_params_cmd} '
-            more_params_cmd = more_params_cmd.split('--')
+            more_params_cmd = [param.strip() for param in more_params_cmd.split('--')]
             more_params_cmd = [param.split(' ') for param in more_params_cmd if param]
             for param in more_params_cmd:
-                command.extend([f'--{param[0]}', ' '.join(param[1:])])
+                command.extend([f'--{param[0]}'] + param[1:])
         params += f'--add_version False --output_dir {sft_args.output_dir} ' \
                   f'--logging_dir {sft_args.logging_dir} --ignore_args_error True'
         command.extend([
@@ -467,8 +466,8 @@ class LLMTrain(BaseUI):
             else:
                 cuda_param = ''
         if envs:
-            envs = envs.split(' ')
-            for env in envs:
+            env_list = envs.split(' ')
+            for env in env_list:
                 k, v = env.split('=')
                 all_envs[k] = v
         log_file = os.path.join(sft_args.logging_dir, 'run.log')
@@ -544,7 +543,7 @@ class LLMTrain(BaseUI):
     def prepare_sub_to_filter(cls):
         tabs_relation_dict = {
             key: val
-            for key, val in zip(['train_type', 'optimizer', 'task_type'],
+            for key, val in zip(['tuner_type', 'optimizer', 'task_type'],
                                 [Tuner.tabs_to_filter, Optimizer.tabs_to_filter, Task.tabs_to_filter])
         }
         return tabs_relation_dict
@@ -553,7 +552,7 @@ class LLMTrain(BaseUI):
     def remove_useless_args(cls, uncleaned_kwargs, tabs_relation_dict):
         for target, tabs_to_filter in tabs_relation_dict.items():
             target_value = uncleaned_kwargs.get(target)
-            if target == 'train_type' and target_value is None:
+            if target == 'tuner_type' and target_value is None:
                 target_value = 'lora'
             elif target == 'vllm_mode' and target_value is None:
                 target_value = 'colocate'

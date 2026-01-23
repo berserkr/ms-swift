@@ -1,21 +1,22 @@
 # Pre-training and Fine-tuning
 Training Capability:
 
-| Method                             | Full-Parameter                                               | LoRA                                                         | QLoRA                                                        | Deepspeed                                                    | Multi-Node                                                   | Multi-Modal                                                  |
-|------------------------------------|--------------------------------------------------------------|--------------------------------------------------------------|--------------------------------------------------------------|--------------------------------------------------------------|--------------------------------------------------------------|--------------------------------------------------------------|
-| Pre-training                       | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/pretrain/train.sh) | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
-| Instruction Supervised Fine-tuning | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/full/train.sh) | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/lora_sft.sh) | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/qlora) | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/multi-gpu/deepspeed) | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/multi-node)                                                            | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/multimodal) |
-| DPO Training                       | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/dpo) | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/dpo) | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/dpo) |
-| GRPO Training                      | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/grpo/internal) | ✅                                                            | ✅                                                            | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/grpo/external)                      | ✅                                                            |
-| Reward Model Training              | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/rm.sh) | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/rm.sh) | ✅                                                            | ✅                                                            |
-| PPO Training                       | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/ppo) | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/ppo) | ✅                                                            | ❌                                                            |
-| GKD Training                       | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/gkd)            | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/gkd) | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/gkd)  |
-| KTO Training                       | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/kto.sh) | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/kto.sh) | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/kto.sh) |
-| CPO Training                       | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/cpo.sh) | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/cpo.sh) | ✅                                                            | ✅                                                            |
-| SimPO Training                     | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/simpo.sh) | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/simpo.sh) | ✅                                                            | ✅                                                            |
-| ORPO Training                      | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/orpo.sh) | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/orpo.sh) | ✅                                                            | ✅                                                            |
-| Classification Model Training      | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/seq_cls/qwen2_5/sft.sh) | ✅                                                            | ✅                                                            | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/seq_cls/qwen2_vl/sft.sh) |
-| Embedding Model Training           | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/embedding/train_gte.sh) | ✅                                                            | ✅                                                            | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/embedding/train_gme.sh)  |
+| Method                                                       | Full-Parameter                                               | LoRA | QLoRA                                                        | Deepspeed                                                    | Multi-Machine                                                | Multimodal                                                   |
+| ------------------------------------------------------------ | ------------------------------------------------------------ | ---- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| [Pre-training](https://github.com/modelscope/ms-swift/blob/main/examples/train/pretrain) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
+| [Supervised Fine-Tuning](https://github.com/modelscope/ms-swift/blob/main/examples/train/lora_sft.sh) | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/full/train.sh) | ✅    | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/qlora) | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/multi-gpu/deepspeed) | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/multi-node) | [✅](https://github.com/modelscope/ms-swift/tree/main/examples/train/multimodal) |
+| [GRPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/grpo) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
+| [GKD](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/gkd) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/gkd) |
+| [PPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/ppo) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ❌                                                            |
+| [DPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/dpo) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/dpo) |
+| [KTO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/kto.sh) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | [✅](https://github.com/modelscope/ms-swift/blob/main/examples/train/multimodal/rlhf/kto.sh) |
+| [Reward Model](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/rm.sh) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
+| [CPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/cpo.sh) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
+| [SimPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/simpo.sh) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
+| [ORPO](https://github.com/modelscope/ms-swift/blob/main/examples/train/rlhf/orpo.sh) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
+| [Embedding](https://github.com/modelscope/ms-swift/blob/main/examples/train/embedding) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
+| [Reranker](https://github.com/modelscope/ms-swift/tree/main/examples/train/reranker) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
+| [Sequence Classification](https://github.com/modelscope/ms-swift/blob/main/examples/train/seq_cls) | ✅                                                            | ✅    | ✅                                                            | ✅                                                            | ✅                                                            | ✅                                                            |
 
 
 ## Environment Preparation
@@ -38,7 +39,6 @@ You can refer to the CLI script for pre-training [here](https://github.com/model
 Tips:
 
 - `swift pt` is equivalent to `swift sft --use_chat_template false --loss_scale all`.
-- `swift pt` typically uses large datasets, and it is recommended to combine it with `--streaming` for streaming datasets.
 
 ## Fine-tuning
 
@@ -62,16 +62,16 @@ Additionally, we offer a series of scripts to help you understand the training c
   - For examples of using full-parameter training for ViT/Aligner, LoRA training for LLM, and employing different learning rates, refer to [here](https://github.com/modelscope/ms-swift/tree/main/examples/train/multimodal/lora_llm_full_vit).
   - For multimodal model packing to increase training speed, refer to the example [here](https://github.com/modelscope/ms-swift/tree/main/examples/train/packing).
 - RLHF Training: Refer to [here](https://github.com/modelscope/ms-swift/tree/main/examples/train/rlhf). For multi-modal models, refer to [here](https://github.com/modelscope/ms-swift/tree/main/examples/train/multimodal/rlhf). For GRPO training, refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/grpo/internal). For reinforcement fine-tuning, see [here](https://github.com/modelscope/ms-swift/tree/main/examples/train/rft).
-- Megatron Training: Supports the use of Megatron's parallelization techniques to accelerate the training of large models, including data parallelism, tensor parallelism, pipeline parallelism, sequence parallelism, and context parallelism. Refer to the [Megatron-SWIFT Training Documentation](./Megatron-SWIFT-Training.md).
+- Megatron Training: Supports the use of Megatron's parallelization techniques to accelerate the training of large models, including data parallelism, tensor parallelism, pipeline parallelism, sequence parallelism, and context parallelism. Refer to the [Megatron-SWIFT Training Documentation](../Megatron-SWIFT/Quick-start.md).
 - Sequence Classification Model Training: Refer to [here](https://github.com/modelscope/ms-swift/tree/main/examples/train/seq_cls).
 - Embedding Model Training: Refer to [here](https://github.com/modelscope/ms-swift/tree/main/examples/train/embedding).
 - Agent Training: Refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/agent).
 - Any-to-Any Model Training: Refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/all_to_all).
 - Other Capabilities:
-  - Streaming Data Reading: Reduces memory usage when handling large datasets. Refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/streaming/train.sh).
+  - Streaming Data Reading: Reduces memory usage when handling large datasets. Refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/streaming/streaming.sh).
   - Packing: Combines multiple sequences into one, making each training sample as close to max_length as possible to improve GPU utilization. Refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/packing).
-  - Long Text Training: Refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/long_text).
-  - Lazy Tokenize: Performs tokenization during training instead of pre-training (for multi-modal models, this avoids the need to load all multi-modal resources before training), which can reduce preprocessing wait times and save memory. Refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/lazy_tokenize/train.sh).
+  - Long Text Training: Refer to [here](https://github.com/modelscope/ms-swift/tree/main/examples/train/sequence_parallel).
+  - Lazy Tokenize: Performs tokenization during training instead of pre-training (for multi-modal models, this avoids the need to load all multi-modal resources before training), which can reduce preprocessing wait times and save memory. Refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/train/streaming/lazy_tokenize.sh).
 
 
 ### Tips:
@@ -90,10 +90,10 @@ Additionally, we offer a series of scripts to help you understand the training c
 You can use the following method for debugging, which is equivalent to using the command line for fine-tuning, but this method does not support distributed training. You can refer to the entry point for the fine-tuning command line [here](https://github.com/modelscope/ms-swift/blob/main/swift/cli/sft.py).
 
 ```python
-from swift.llm import sft_main, TrainArguments
-result = sft_main(TrainArguments(
+from swift import sft_main, SftArguments
+result = sft_main(SftArguments(
     model='Qwen/Qwen2.5-7B-Instruct',
-    train_type='lora',
+    tuner_type='lora',
     dataset=['AI-ModelScope/alpaca-gpt4-data-zh#500',
              'AI-ModelScope/alpaca-gpt4-data-en#500',
              'swift/self-cognition#500'],
@@ -125,7 +125,7 @@ To perform inference on a LoRA-trained checkpoint using the CLI:
 CUDA_VISIBLE_DEVICES=0 \
 swift infer \
     --adapters output/vx-xxx/checkpoint-xxx \
-    --infer_backend pt \
+    --infer_backend transformers \
     --stream true \
     --temperature 0 \
     --max_new_tokens 2048
@@ -142,14 +142,14 @@ For batch inference on the validation set of the dataset:
 CUDA_VISIBLE_DEVICES=0 \
 swift infer \
     --adapters output/vx-xxx/checkpoint-xxx \
-    --infer_backend pt \
+    --infer_backend transformers \
     --temperature 0 \
     --max_new_tokens 2048 \
     --load_data_args true \
     --max_batch_size 1
 ```
 
-- You can set `--max_batch_size 8` to enable batch processing with `--infer_backend pt`. If you use `infer_backend vllm/sglang/lmdeploy`, it will automatically handle batching without needing to specify.
+- You can set `--max_batch_size 8` to enable batch processing with `--infer_backend transformers`. If you use `infer_backend vllm/sglang/lmdeploy`, it will automatically handle batching without needing to specify.
 - `--load_data_args true` will additionally read the data parameters from the training storage parameter file `args.json`.
 
 If you want to perform inference on an additional test set instead of using the training validation set, use `--val_dataset <dataset_path>` for inference:
@@ -158,7 +158,7 @@ If you want to perform inference on an additional test set instead of using the 
 CUDA_VISIBLE_DEVICES=0 \
 swift infer \
     --adapters output/vx-xxx/checkpoint-xxx \
-    --infer_backend pt \
+    --infer_backend transformers \
     --temperature 0 \
     --max_new_tokens 2048 \
     --val_dataset <dataset-path> \
@@ -172,10 +172,10 @@ Example of Inference on LoRA-Trained Model Using Python:
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-from swift.llm import (
-    PtEngine, RequestConfig, safe_snapshot_download, get_model_tokenizer, get_template, InferRequest
-)
-from swift.tuners import Swift
+from swift.infer_engine import TransformersEngine, RequestConfig, InferRequest
+from swift import get_model_processor, get_template
+from swift.utils import safe_snapshot_download
+from peft import PeftModel
 # Please adjust the following lines
 model = 'Qwen/Qwen2.5-7B-Instruct'
 lora_checkpoint = safe_snapshot_download('swift/test_lora')  # Change to your checkpoint_dir
@@ -183,11 +183,12 @@ template_type = None  # None: use the default template_type of the corresponding
 default_system = "You are a helpful assistant."  # None: use the default system prompt of the corresponding model
 
 # Load model and dialogue template
-model, tokenizer = get_model_tokenizer(model)
-model = Swift.from_pretrained(model, lora_checkpoint)
+model, tokenizer = get_model_processor(model)
+if lora_checkpoint is not None:
+    model = PeftModel.from_pretrained(model, lora_checkpoint)
 template_type = template_type or model.model_meta.template
-template = get_template(template_type, tokenizer, default_system=default_system)
-engine = PtEngine.from_model_template(model, template, max_batch_size=2)
+template = get_template(tokenizer, template_type=template_type, default_system=default_system)
+engine = TransformersEngine(model, template=template, max_batch_size=2)
 request_config = RequestConfig(max_tokens=512, temperature=0)
 
 # Using 2 infer_requests to demonstrate batch inference
@@ -209,10 +210,10 @@ Example of LoRA Inference for Multi-Modal Model:
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-from swift.llm import (
-    PtEngine, RequestConfig, safe_snapshot_download, get_model_tokenizer, get_template, InferRequest
-)
-from swift.tuners import Swift
+from swift.infer_engine import TransformersEngine, RequestConfig, InferRequest
+from swift import get_model_processor, get_template
+from swift.utils import safe_snapshot_download
+from peft import PeftModel
 # Please adjust the following lines
 model = 'Qwen/Qwen2.5-VL-7B-Instruct'
 lora_checkpoint = safe_snapshot_download('swift/test_grounding')  # Change to your checkpoint_dir
@@ -220,11 +221,12 @@ template_type = None  # None: use the default template_type of the corresponding
 default_system = None  # None: use the default system prompt of the corresponding model
 
 # Load model and dialogue template
-model, tokenizer = get_model_tokenizer(model)
-model = Swift.from_pretrained(model, lora_checkpoint)
+model, tokenizer = get_model_processor(model)
+if lora_checkpoint is not None:
+    model = PeftModel.from_pretrained(model, lora_checkpoint)
 template_type = template_type or model.model_meta.template
-template = get_template(template_type, tokenizer, default_system=default_system)
-engine = PtEngine.from_model_template(model, template, max_batch_size=2)
+template = get_template(tokenizer, template_type=template_type, default_system=default_system)
+engine = TransformersEngine(model, template=template, max_batch_size=2)
 request_config = RequestConfig(max_tokens=512, temperature=0)
 
 # Using 2 infer_requests to demonstrate batch inference
@@ -242,7 +244,7 @@ print(f'response1: {resp_list[1].choices[0].message.content}')
 If you are using a model trained with ms-swift, you can obtain the training configuration as follows:
 
 ```python
-from swift.llm import safe_snapshot_download, BaseArguments
+from swift import safe_snapshot_download, BaseArguments
 
 lora_adapters = safe_snapshot_download('swift/test_lora')
 args = BaseArguments.from_pretrained(lora_adapters)
@@ -268,7 +270,7 @@ Use the following command to start the deployment server. If the weights are tra
 CUDA_VISIBLE_DEVICES=0 \
 swift deploy \
     --adapters output/vx-xxx/checkpoint-xxx \
-    --infer_backend pt \
+    --infer_backend transformers \
     --temperature 0 \
     --max_new_tokens 2048 \
     --served_model_name '<model-name>'

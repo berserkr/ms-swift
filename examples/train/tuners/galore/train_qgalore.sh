@@ -3,9 +3,10 @@
 CUDA_VISIBLE_DEVICES=0 \
 swift sft \
     --model Qwen/Qwen2.5-7B-Instruct \
-    --train_type full \
+    --tuner_type full \
     --torch_dtype bfloat16 \
     --dataset 'lvjianjin/AdvertiseGen#1000' \
+    --load_from_cache_file true \
     --split_dataset_ratio 0.01 \
     --num_train_epochs 1 \
     --per_device_train_batch_size 1 \

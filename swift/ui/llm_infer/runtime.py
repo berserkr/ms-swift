@@ -1,6 +1,7 @@
-# Copyright (c) Alibaba, Inc. and its affiliates.
+# Copyright (c) ModelScope Contributors. All rights reserved.
 import collections
 import os.path
+import re
 import subprocess
 import sys
 import time
@@ -11,8 +12,8 @@ import gradio as gr
 import psutil
 from packaging import version
 
-from swift.ui.base import BaseUI
 from swift.utils import format_time, get_logger
+from ..base import BaseUI
 
 logger = get_logger()
 
@@ -269,15 +270,19 @@ class Runtime(BaseUI):
             all_args = {}
         elements = list(base_tab.valid_elements().values())
         ret = []
-        is_custom_path = 'ckpt_dir' in all_args
+        is_adapter = ('adapters' in all_args) and ('model' not in all_args)
         for e in elements:
             if e.elem_id in all_args:
                 if isinstance(e, gr.Dropdown) and e.multiselect:
                     arg = all_args[e.elem_id].split(' ')
+                elif isinstance(e, gr.Slider) and re.fullmatch(cls.int_regex, all_args[e.elem_id]):
+                    arg = int(all_args[e.elem_id])
+                elif isinstance(e, gr.Slider) and re.fullmatch(cls.float_regex, all_args[e.elem_id]):
+                    arg = float(all_args[e.elem_id])
                 else:
                     if e.elem_id == 'model':
-                        if is_custom_path:
-                            arg = all_args['ckpt_dir']
+                        if is_adapter:
+                            arg = all_args['adapters']
                         else:
                             arg = all_args[e.elem_id]
                     else:

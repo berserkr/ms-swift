@@ -1,6 +1,7 @@
-# Copyright (c) Alibaba, Inc. and its affiliates.
+# Copyright (c) ModelScope Contributors. All rights reserved.
 # Code borrowed from huggingface/peft
 import math
+import warnings
 from contextlib import contextmanager
 from typing import Any, List, Optional, Tuple
 
@@ -15,6 +16,7 @@ from megatron.core.extensions.transformer_engine import (TEColumnParallelGrouped
                                                          TERowParallelGroupedLinear, TERowParallelLinear)
 from megatron.core.models.common.embeddings.language_model_embedding import LanguageModelEmbedding
 from megatron.core.parallel_state import get_expert_tensor_parallel_world_size, get_tensor_model_parallel_world_size
+from megatron.core.tensor_parallel import gather_from_sequence_parallel_region, scatter_to_sequence_parallel_region
 from megatron.core.transformer.mlp import apply_swiglu_sharded_factory
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.moe.router import TopKRouter
@@ -23,9 +25,12 @@ from peft.tuners.lora import model
 from peft.tuners.lora.layer import LoraLayer
 from peft.tuners.tuners_utils import BaseTunerLayer, check_adapters_to_merge
 from peft.utils.other import transpose
+from transformers.utils import is_torch_npu_available
 
 from swift.utils import get_current_device
 from ..utils import tuners_sharded_state_dict
+
+mcore_013 = version.parse(megatron.core.__version__) >= version.parse('0.13.0rc0')
 
 
 class LoraParallelLinear(MegatronModule, LoraLayer):
@@ -46,7 +51,9 @@ class LoraParallelLinear(MegatronModule, LoraLayer):
     ):
         config = base_layer.config
         super().__init__(config=config)
-        LoraLayer.__init__(self, base_layer=base_layer)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            LoraLayer.__init__(self, base_layer=base_layer)
 
         if use_dora:
             raise ValueError(f'{self.__class__.__name__} does not support DoRA yet, please set it to False')
@@ -56,6 +63,7 @@ class LoraParallelLinear(MegatronModule, LoraLayer):
         self.fan_in_fan_out = fan_in_fan_out
         self._active_adapter = adapter_name
         self.is_expert = getattr(base_layer, 'is_expert', False)
+        self.sequence_parallel = getattr(base_layer, 'sequence_parallel', False)
         if self.is_expert:
             self.tp_size = get_expert_tensor_parallel_world_size()
         else:
@@ -92,8 +100,7 @@ class LoraParallelLinear(MegatronModule, LoraLayer):
             'config': self.config,
             'is_expert': self.is_expert,
         }
-        megatron_core_013 = version.parse(megatron.core.__version__) >= version.parse('0.13.0rc0')
-        if megatron_core_013:
+        if mcore_013:
             kwargs['tp_group'] = self.base_layer.tp_group
         if isinstance(self.base_layer, TopKRouter):
             router_shape = self.base_layer.weight.shape
@@ -149,7 +156,10 @@ class LoraParallelLinear(MegatronModule, LoraLayer):
                 )
                 lora_a.parallel_mode = self.base_layer.parallel_mode  # fix moe_shared_expert_overlap
         else:
-            out_features = self.out_features * self.tp_size
+            if is_torch_npu_available():
+                out_features = self.out_features
+            else:
+                out_features = self.out_features * self.tp_size
             if self.is_grouped:
                 lora_a = TEGroupedLinear(
                     num_gemms=self.base_layer.num_gemms,
@@ -166,13 +176,20 @@ class LoraParallelLinear(MegatronModule, LoraLayer):
                     **kwargs,
                 )
             else:
-                lora_a = TELinear(
-                    input_size=self.in_features,
-                    output_size=r,
-                    bias=lora_bias,
-                    parallel_mode=None,
-                    skip_weight_param_allocation=False,
-                    **kwargs)
+                if is_torch_npu_available():
+                    lora_a = nn.Linear(
+                        in_features=self.in_features,
+                        out_features=r,
+                        bias=lora_bias,
+                    )
+                else:
+                    lora_a = TELinear(
+                        input_size=self.in_features,
+                        output_size=r,
+                        bias=lora_bias,
+                        parallel_mode=None,
+                        skip_weight_param_allocation=False,
+                        **kwargs)
                 lora_b = TEColumnParallelLinear(
                     input_size=r,
                     output_size=out_features,
@@ -181,12 +198,15 @@ class LoraParallelLinear(MegatronModule, LoraLayer):
                     **kwargs,
                 )
                 lora_b.parallel_mode = self.base_layer.parallel_mode  # fix moe_shared_expert_overlap
+        # https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/transformer/moe/shared_experts.py#L93
         for lora in [lora_a, lora_b]:
             if isinstance(lora, (TERowParallelLinear, TEColumnParallelLinear)) and lora.parallel_mode is None:
                 lora.ub_overlap_rs_fprop = False
                 lora.ub_overlap_ag_dgrad = False
                 lora.ub_overlap_ag_fprop = False
                 lora.ub_overlap_rs_dgrad = False
+        lora_a.sequence_parallel = False
+        lora_b.sequence_parallel = False
         self.lora_A[adapter_name] = lora_a
         self.lora_B[adapter_name] = lora_b
         if hasattr(self, 'lora_bias'):
@@ -276,7 +296,10 @@ class LoraParallelLinear(MegatronModule, LoraLayer):
                 result, bias = self.base_layer(x, *args, **kwargs)
             else:
                 self.base_layer.return_layernorm_output = True
-                (result, x), bias = self.base_layer(x, *args, **kwargs)
+                if is_torch_npu_available():
+                    result, bias = self.base_layer(x, *args, **kwargs)
+                else:
+                    (result, x), bias = self.base_layer(x, *args, **kwargs)
         elif isinstance(self.base_layer, (TELinear, TEGroupedLinear)):
             result, bias = self.base_layer(x, *args, **kwargs)
         elif isinstance(self.base_layer, TopKRouter):
@@ -285,6 +308,8 @@ class LoraParallelLinear(MegatronModule, LoraLayer):
         else:
             raise ValueError(f'Unsupported base layer type: {type(self.base_layer)}')
         if not isinstance(self.base_layer, TopKRouter) and not self.disable_adapters and not self.merged:
+            if self.sequence_parallel and self.base_layer.parallel_mode == 'column':
+                x = gather_from_sequence_parallel_region(x)
             for active_adapter in self.active_adapters:
                 if active_adapter not in self.lora_A.keys():
                     continue
@@ -304,7 +329,8 @@ class LoraParallelLinear(MegatronModule, LoraLayer):
                 if isinstance(lora_result, tuple):
                     lora_result = lora_result[0]
                 lora_result = lora_result * scaling
-
+                if self.sequence_parallel and self.base_layer.parallel_mode == 'row':
+                    lora_result = scatter_to_sequence_parallel_region(lora_result)
                 result = result + lora_result
 
         result = result.to(previous_dtype)
@@ -410,6 +436,40 @@ class LoraParallelLinear(MegatronModule, LoraLayer):
                     for orig_weight, delta_weight in zip(orig_weights, delta_weights):
                         orig_weight.data += delta_weight
                 self.merged_adapters.append(active_adapter)
+        if origin_device.type == 'cpu':
+            self.to(device=origin_device)
+
+    def unmerge(self) -> None:
+        """
+        Unmerge all merged adapter weights from the base weights.
+
+        This method reverses the merge operation by subtracting the LoRA delta weights
+        from the base layer weights, restoring the original base weights.
+        """
+        if not self.merged:
+            # No adapters to unmerge
+            return
+
+        base_layer = self.get_base_layer()
+        origin_device = base_layer.weight0.device if self.is_grouped else base_layer.weight.device
+        if origin_device.type == 'cpu':
+            self.to(device=get_current_device())
+
+        for active_adapter in self.merged_adapters:
+            if active_adapter in self.lora_A.keys():
+                if self.is_grouped:
+                    orig_weights = [getattr(base_layer, f'weight{i}') for i in range(base_layer.num_gemms)]
+                else:
+                    orig_weights = [base_layer.weight]
+
+                delta_weights = self.get_delta_weights(active_adapter)
+                for orig_weight, delta_weight in zip(orig_weights, delta_weights):
+                    # Subtract the delta weight to unmerge
+                    orig_weight.data -= delta_weight
+
+        # Clear the merged adapters list
+        self.merged_adapters = []
+
         if origin_device.type == 'cpu':
             self.to(device=origin_device)
 

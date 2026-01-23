@@ -1,15 +1,13 @@
 # 4 * 36GB
 # A demo using the Hugging Face dataset
 # The first model weights will be saved around step 70.
-pip install "transformers==4.51.*"
-
 NPROC_PER_NODE=4 \
 MAX_PIXELS=1003520 \
 CUDA_VISIBLE_DEVICES=0,1,2,3 \
 HF_ENDPOINT=https://hf-mirror.com \
 swift sft \
     --model Qwen/Qwen2.5-VL-7B-Instruct \
-    --train_type lora \
+    --tuner_type lora \
     --dataset 'HF::linxy/LaTeX_OCR:full#20000' \
     --torch_dtype bfloat16 \
     --attn_impl flash_attn \

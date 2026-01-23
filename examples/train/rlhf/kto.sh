@@ -5,8 +5,9 @@ NPROC_PER_NODE=$nproc_per_node \
 swift rlhf \
     --rlhf_type kto \
     --model Qwen/Qwen2.5-7B-Instruct \
-    --train_type lora \
+    --tuner_type lora \
     --dataset 'AI-ModelScope/ultrafeedback-binarized-preferences-cleaned-kto#10000' \
+    --load_from_cache_file true \
     --split_dataset_ratio 0.01 \
     --num_train_epochs 1 \
     --per_device_train_batch_size 1 \

@@ -3,9 +3,10 @@
 deepspeed --hostfile=./examples/train/multi-node/deepspeed/host.txt \
     swift/cli/sft.py \
     --model Qwen/Qwen2.5-7B-Instruct \
-    --train_type lora \
+    --tuner_type lora \
     --torch_dtype bfloat16 \
     --dataset 'swift/self-cognition#1000' \
+    --load_from_cache_file true \
     --num_train_epochs 1 \
     --lora_rank 8 \
     --lora_alpha 32 \

@@ -2,8 +2,9 @@
 CUDA_VISIBLE_DEVICES=0 \
 swift sft \
     --model Qwen/Qwen2.5-3B \
-    --train_type full \
+    --tuner_type full \
     --dataset AI-ModelScope/function-calling-chatml \
+    --load_from_cache_file true \
     --split_dataset_ratio 0.01 \
     --agent_template hermes \
     --torch_dtype bfloat16 \

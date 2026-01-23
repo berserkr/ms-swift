@@ -1,4 +1,4 @@
-# Copyright (c) Alibaba, Inc. and its affiliates.
+# Copyright (c) ModelScope Contributors. All rights reserved.
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from typing import Optional
@@ -6,8 +6,8 @@ from typing import Optional
 import torch
 from torch import nn
 
-from swift.llm import MODEL_ARCH_MAPPING, HfConfigFactory, ModelKeys
-from swift.utils.logger import get_logger
+from swift.model import MODEL_ARCH_MAPPING, ModelKeys
+from swift.utils import HfConfigFactory, get_logger
 from .utils import ActivationMixin, SwiftAdapter, SwiftConfig, SwiftOutput
 
 logger = get_logger()
@@ -82,14 +82,21 @@ class LLaMAPro(SwiftAdapter):
 
         new_module_list = nn.ModuleList()
         new_module_idx = []
+        layer_types = getattr(model.config, 'layer_types', None)
+        _new_layer_type = []
         for idx, module in enumerate(module_list):
             new_module_list.append(module)
+            _layer_type = layer_types[idx] if layer_types else None
+            _new_layer_type.append(_layer_type)
             if (idx + 1) % num_stride == 0:
                 new_module = deepcopy(module)
                 ActivationMixin.mark_all_sub_modules_as_plugin(new_module)
                 new_module_list.append(new_module)
                 new_module_idx.append(idx + 1 + len(new_module_idx))
+                _new_layer_type.append(_layer_type)
 
+        if layer_types is not None:
+            model.config.layer_types = _new_layer_type
         LLaMAPro._update_module_weight(config, new_module_list, new_module_idx)
         LLaMAPro._update_module_attr(config, new_module_list)
         model.config.num_hidden_layers = len(new_module_list)
@@ -139,7 +146,7 @@ class LLaMAPro(SwiftAdapter):
                     getattr(module, attention).layer_idx = idx
                 except AttributeError:
                     getattr(module, 'cross_attn').layer_idx = idx
-        elif model_type in ('chatglm', 'glm4'):
+        elif model_type in ('chatglm', 'chatglm4'):
             for idx, module in enumerate(module_list):
                 getattr(module, attention).layer_number = idx
         elif model_type in ('phi2', ):

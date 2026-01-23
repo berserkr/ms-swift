@@ -8,13 +8,14 @@ NPROC_PER_NODE=8 \
 swift rlhf \
   --rlhf_type grpo \
   --model Qwen/Qwen2.5-VL-72B-Instruct \
-  --train_type lora \
+  --tuner_type lora \
   --use_vllm true \
   --vllm_mode colocate \
   --vllm_gpu_memory_utilization 0.5 \
   --vllm_max_model_len 8192 \
   --vllm_tensor_parallel_size 4 \
   --dataset lmms-lab/multimodal-open-r1-8k-verified#1000 \
+  --load_from_cache_file true \
   --external_plugins examples/train/grpo/plugin/plugin.py \
   --reward_funcs external_r1v_acc format \
   --reward_weights 1 0.1 \
@@ -39,7 +40,6 @@ swift rlhf \
   --top_p 1.0 \
   --top_k 80 \
   --log_completions true \
-  --async_generate false \
   --offload_optimizer true \
   --offload_model true \
   --move_model_batches 40 \

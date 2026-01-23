@@ -8,6 +8,9 @@ SWIFT supports Reranker model training. Currently supported models include:
    - 0.6B: [ModelScope](https://www.modelscope.cn/models/Qwen/Qwen3-Reranker-0.6B) [Hugging Face](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B)
    - 4B: [ModelScope](https://www.modelscope.cn/models/Qwen/Qwen3-Reranker-4B) [Hugging Face](https://huggingface.co/Qwen/Qwen3-Reranker-4B)
    - 8B: [ModelScope](https://www.modelscope.cn/models/Qwen/Qwen3-Reranker-8B) [Hugging Face](https://huggingface.co/Qwen/Qwen3-Reranker-8B)
+3. qwen3-vl-reranker model
+   - 2B: [ModelScope](https://www.modelscope.cn/models/Qwen/Qwen3-VL-Reranker-2B) [Hugging Face](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B)
+   - 8B: [ModelScope](https://www.modelscope.cn/models/Qwen/Qwen3-VL-Reranker-8B) [Hugging Face](https://huggingface.co/Qwen/Qwen3-VL-Reranker-8B)
 
 ## Implementation Methods
 
@@ -60,26 +63,65 @@ Environment variable configuration:
 - **Pointwise:** Independent relevance judgment, simple training, but ignores relative relationships between documents
 - **Listwise:** Learning relative ranking, better performance, more suitable for the essential needs of ranking tasks
 
-The loss function source code can be found [here](https://github.com/modelscope/ms-swift/blob/main/swift/plugin/loss.py).
+The loss function source code can be found [here](https://github.com/modelscope/ms-swift/blob/main/swift/loss/mapping.py).
 
 ## Dataset Format
 
 ```json lines
-{"query": "query", "response": "relevant_doc1", "rejected_response": ["irrelevant_doc1", "irrelevant_doc2", ...]}
-{"query": "query", "response": "relevant_doc2", "rejected_response": ["irrelevant_doc1", "irrelevant_doc2", ...]}
-...
+# LLM
+{"messages": [{"role": "user", "content": "query"}], "positive_messages": [[{"role": "assistant", "content": "relevant_doc1"}],[{"role": "assistant", "content": "relevant_doc2"}]], "negative_messages": [[{"role": "assistant", "content": "irrelevant_doc1"}],[{"role": "assistant", "content": "irrelevant_doc2"}], ...]}
+# MLLM
+{"messages": [{"role": "user", "content": "<image>query"}], "images": ["/some/images.jpg"], "positive_messages": [[{"role": "assistant", "content": "<image>relevant_doc1"}]], "positive_images": [["/some/positive_images.jpg"]], "negative_messages": [[{"role": "assistant", "content": "<image><image>irrelevant_doc1"}], [{"role": "assistant", "content": "<image>irrelevant_doc2"}]], "negative_images": [["/some/negative_images1.jpg", "/some/negative_images2.jpg"], ["/some/negative_images3.jpg"]]}
 ```
 
 **Field Description:**
-- `query`: Query text
-- `response`: Positive document relevant to the query
-- `rejected_response`: List of negative documents irrelevant to the query, supports multiple negative examples
+- `messages`: Query text
+- `positive_messages`: List of positive documents relevant to the query, supports multiple positive examples
+- `negative_messages`: List of negative documents irrelevant to the query, supports multiple negative examples
+
+**Environment Variable Configuration:**
+- `MAX_POSITIVE_SAMPLES`: Maximum number of positive examples per query (default: 1)
+- `MAX_NEGATIVE_SAMPLES`: Maximum number of negative examples per query (default: 7)
+
+> By default, `MAX_POSITIVE_SAMPLES` positive examples and `MAX_NEGATIVE_SAMPLES` negative examples will be extracted from each data item. Each positive example will be grouped with `MAX_NEGATIVE_SAMPLES` negative examples to form a group. Therefore, each data item will be expanded into `MAX_POSITIVE_SAMPLES`x`(1 + MAX_NEGATIVE_SAMPLES)` data points.
+> If the number of positive/negative examples in the data is insufficient, all positive/negative examples will be used. If the number of positive and negative examples in the data exceeds `MAX_POSITIVE_SAMPLES` and `MAX_NEGATIVE_SAMPLES`, random sampling will be performed.
+> **IMPORTANT**: The expanded data will be placed in the same batch. Therefore, the effective batch size on each device will be `per_device_train_batch_size` × `MAX_POSITIVE_SAMPLES` × (1 + `MAX_NEGATIVE_SAMPLES`). Please adjust your `per_device_train_batch_size` accordingly to avoid out-of-memory errors.
 
 ## Training Scripts
 
-SWIFT provides four training script templates:
+Training scripts provided by ms-swift:
 
-- [Pointwise Classification Reranker](https://github.com/tastelikefeet/swift/blob/main/examples/train/reranker/train_reranker.sh)
-- [Pointwise Generative Reranker](https://github.com/tastelikefeet/swift/blob/main/examples/train/reranker/train_generative_reranker.sh)
-- [Listwise Classification Reranker](https://github.com/tastelikefeet/swift/blob/main/examples/train/reranker/train_reranker_listwise.sh)
-- [Listwise Generative Reranker](https://github.com/tastelikefeet/swift/blob/main/examples/train/reranker/train_generative_reranker_listwise.sh)
+- [Qwen3-Reranker/Qwen3-VL-Reranker](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/qwen3)
+- [Pointwise Classification Reranker](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/train_reranker.sh)
+- [Pointwise Generative Reranker](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/train_generative_reranker.sh)
+- [Listwise Classification Reranker](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/train_reranker_listwise.sh)
+- [Listwise Generative Reranker](https://github.com/modelscope/ms-swift/blob/main/examples/train/reranker/train_generative_reranker_listwise.sh)
+
+For inference scripts, please refer to [here](https://github.com/modelscope/ms-swift/blob/main/examples/infer/demo_reranker.py).
+
+## Advanced
+
+- Qwen3-Reranker Custom Instruction:
+  - Default template:
+
+```text
+<|im_start|>system
+Judge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be "yes" or "no".<|im_end|>
+<|im_start|>user
+<Instruct>: {Instruction}
+<Query>: {Query}
+<Document>: {Document}<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+
+```
+
+- Default instruction:
+  - `Given a web search query, retrieve relevant passages that answer the query`
+
+- Instruction priority (nearest wins):
+  - `system` inside `positive_messages`/`negative_messages` > `system` in main `messages` > default instruction.
+  - That is, if a positive/negative message sequence contains a `system`, it takes precedence; otherwise, if main `messages` has a `system`, use it; if neither is provided, use the default instruction.

@@ -21,7 +21,7 @@ modelscope download --dataset Lixiang/ChenShawn-DeepEyes-Datasets-47k
 huggingface-cli download ChenShawn/DeepEyes-Datasets-47k --repo-type=dataset
 ```
 
-数据集内有三个parquet文件，`swift/swift/llm/dataset/data/dataset_info.json` 文件中分别进行注册，将数据集中的 `prompt` 列重命名为 `messages`
+数据集内有三个parquet文件，`swift/dataset/data/dataset_info.json` 文件中分别进行注册，将数据集中的 `prompt` 列重命名为 `messages`
 
 ```json
     {
@@ -61,7 +61,7 @@ swift deploy \
     --vllm_tensor_parallel_size 4 \
 ```
 
-在 plugin 文件中，使用OpenAI接口进行调用，参考[奖励模型文档](../DeveloperGuide/奖励模型.md#外部部署)
+在 plugin 文件中，使用OpenAI接口进行调用，参考[奖励模型文档](../DeveloperGuide/reward_model.md#外部部署)
 
 
 训练参考该[脚本](https://github.com/modelscope/ms-swift/tree/main/examples/train/grpo/plugin/deepeyes/deepeyes.sh)

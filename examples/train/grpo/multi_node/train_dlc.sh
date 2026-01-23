@@ -10,8 +10,9 @@ torchrun \
     swift/cli/rlhf.py \
     --rlhf_type grpo \
     --model Qwen/Qwen2.5-7B \
-    --train_type full \
+    --tuner_type full \
     --dataset AI-MO/NuminaMath-TIR#10000 \
+    --load_from_cache_file true \
     --torch_dtype bfloat16 \
     --system examples/train/grpo/prompt.txt \
     --num_train_epochs 1 \
