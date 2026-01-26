@@ -165,6 +165,10 @@ class BaseDatasetLoader(ABC):
                 train_sample = dataset_sample - val_sample
                 assert train_sample > 0
                 with safe_ddp_context(None, True):
+                    logger.info(train_dataset)
+                    logger.info(train_dataset.features)
+                    logger.info(train_dataset.data.schema)
+
                     train_dataset, val_dataset = train_dataset.train_test_split(
                         test_size=val_sample, shuffle=shuffle, seed=get_seed(random_state)).values()
                 train_dataset = sample_dataset(train_dataset, train_sample, shuffle, random_state)

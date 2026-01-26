@@ -38,6 +38,6 @@ agent_template_map = {
     # extra
     'react_grpo': ReactGRPOAgentTemplate,
     'mistral': MistralAgentTemplate,
-    'granite_agentic' : GraniteAgentTemplate,,
+    'granite_agentic' : GraniteAgentTemplate,
     'youtu': YoutuAgentTemplate,
 }

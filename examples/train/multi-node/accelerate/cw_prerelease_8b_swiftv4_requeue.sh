@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
-#SBATCH --nodes=32
-#SBATCH --job-name=granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale_pf
+#SBATCH --nodes=16
+#SBATCH --job-name=granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale_pf-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale_pf-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -156,11 +156,10 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     --rdzv_backend c10d \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
-
 export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache 
 export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-base-prerelease-killington-final-phase1_mix_1216_v9-pack-2ep-8acc-granite-5e-5-16384-swift_v3_2.0scale/v0-20260106-071542/checkpoint-2620 \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1216/phase1_mix_1216_v1.jsonl \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1216/phase1_mix_1216_v1_mt_only.jsonl \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
     --num_train_epochs 2 \
@@ -168,7 +167,7 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/c
     --per_device_eval_batch_size 1 \
     --learning_rate 5e-5 \
     --gradient_accumulation_steps 8 \
-    --padding_free true \
+    --packing true \
     --eval_steps 100 \
     --save_steps 100 \
     --logging_steps 1 \
@@ -178,16 +177,16 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/c
     --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale_pf \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
     "
 
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale_pf/v0-20251023-072716/checkpoint-1700 \    
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale_pf/v0-20250830-042840/checkpoint-2500 \
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale/v0-20251023-072716/checkpoint-1700 \    
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale/v0-20250830-042840/checkpoint-2500 \
 #    --loss_scale granite \
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale_pf/v1-20250831-062806/checkpoint-1300
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale/v1-20250831-062806/checkpoint-1300
 #    --router_aux_loss_coef 1e-3 \
 
 echo $SCRIPT_ARGS >> $LOG
@@ -202,6 +201,7 @@ echo "*********************** START ****************************" >> $LOG
 echo $CMD >> $LOG
 
 srun ${SRUN_ARGS} bash -c "${CMD}"
+
 rc=$?
 echo "rc=${rc}"
 sacct -j $SLURM_JOBID -o "jobid,jobname,start,end,state" >> $LOG

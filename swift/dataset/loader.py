@@ -58,6 +58,11 @@ class DatasetLoader(BaseDatasetLoader):
             dataset = RowPreprocessor.safe_rename_columns(dataset, self.columns)
         dataset = dataset_meta.preprocess_func(
             dataset, num_proc=self.num_proc, load_from_cache_file=self.load_from_cache_file, strict=self.strict)
+
+        logger.info(self.columns)
+        logger.info(dataset)
+        logger.info('='*100)
+
         if self.remove_unused_columns:
             dataset = RowPreprocessor.remove_useless_columns(dataset)
         return dataset
@@ -309,6 +314,9 @@ def load_dataset(
         remove_unused_columns=remove_unused_columns,
     )
 
+    logger.info(columns)
+    logger.info('+'*100)
+
     use_hf_default = use_hf
     if use_hf_default is None:
         use_hf_default = True if use_hf_hub() else False
@@ -326,6 +334,14 @@ def load_dataset(
         else:
             dataset_meta = dataset_syntax.get_dataset_meta(use_hf)
         train_dataset = loader.load(dataset_syntax, dataset_meta, use_hf=use_hf)
+
+        logger.info(dataset_syntax)
+        logger.info(dataset_meta)
+        logger.info(train_dataset)
+        logger.info(train_dataset.features)
+        logger.info(train_dataset.data.schema)
+        logger.info('+'*100)
+
         train_dataset, val_dataset = loader.post_process(
             train_dataset,
             dataset_sample=dataset_syntax.dataset_sample,

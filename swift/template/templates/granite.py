@@ -15,9 +15,6 @@ from ..template_inputs import StdTemplateInputs
 from ..utils import Context, Prompt, Word, findall
 from ..vision_utils import load_batch
 
-import re
-import json
-
 @dataclass
 class GraniteTemplateMeta(TemplateMeta):
     """
