@@ -1,29 +1,27 @@
 # Copyright (c) ModelScope Contributors. All rights reserved.
 # Part of the implementation is borrowed from huggingface/transformers.
 import collections
+import datasets
 import inspect
+import json
 import logging
+import numpy as np
 import os
 import random
 import re
+import safetensors
 import shutil
 import time
-import warnings
-from contextlib import contextmanager
-from copy import copy
-from functools import partial, wraps
-from types import MethodType
-from typing import Callable, Dict, List, Optional
-
-import datasets
-import numpy as np
-import safetensors
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.utils.checkpoint
 import transformers
+import warnings
+from contextlib import contextmanager
+from copy import copy
 from datasets import Dataset as HfDataset
+from functools import partial, wraps
 from modelscope import check_local_model_is_latest
 from packaging import version
 from peft import PeftModel
@@ -35,6 +33,8 @@ from transformers.trainer import OPTIMIZER_NAME, PREFIX_CHECKPOINT_DIR, SCHEDULE
 from transformers.trainer import Trainer as HfTrainer
 from transformers.trainer import reissue_pt_warnings
 from transformers.trainer_utils import IntervalStrategy
+from types import MethodType
+from typing import Callable, Dict, List, Optional
 
 from swift.callbacks import callbacks_map
 from swift.dataloader import BatchSamplerShard, DataLoaderDispatcher, DataLoaderShard
@@ -50,9 +50,9 @@ from swift.tuner_plugin import tuners_map
 from swift.tuners import SwiftModel
 from swift.utils import (HfConfigFactory, copy_files_by_pattern, deep_getattr, get_current_device, get_logger,
                          get_packed_seq_params, is_dist, is_mp, is_mp_ddp, ms_logger_context, seed_worker)
-from . import patcher
 from .arguments import TrainingArguments
-from .utils import can_return_loss, dynamic_gradient_checkpointing, find_labels, get_function, is_instance_of_ms_model
+from .utils import (can_return_loss, dynamic_gradient_checkpointing, find_labels, get_function, get_resume_dir,
+                    is_instance_of_ms_model, patch_modelscope_hub_timeout, replace_index_file)
 
 try:
     from trl import AutoModelForCausalLMWithValueHead
@@ -61,10 +61,9 @@ except (ImportError, RuntimeError):
 
 logger = get_logger()
 
-FLASH_CKPT_WAIT_TIMEOUT = 1800
-
 
 class SwiftMixin:
+    FLASH_CKPT_WAIT_TIMEOUT = 1800
 
     def __init__(self,
                  model: PreTrainedModel,
@@ -84,7 +83,7 @@ class SwiftMixin:
         self.task_type = self.template.task_type
         self.problem_type = getattr(model.config, 'problem_type', None)
         if args.check_model and hasattr(model, 'model_dir'):
-            with ms_logger_context(logging.CRITICAL), self._patch_timeout():
+            with ms_logger_context(logging.CRITICAL), patch_modelscope_hub_timeout():
                 config_info = self._collect_config_info()
                 config_info.update({
                     'invoked_by': 'local_trainer',
@@ -147,25 +146,7 @@ class SwiftMixin:
 
     def _add_callbacks(self):
         for callback in self.args.callbacks:
-            self.add_callback(callbacks_map[callback](self.args, self))
-
-    @contextmanager
-    def _patch_timeout(self):
-        from modelscope.hub.api import HubApi
-        __init__ = HubApi.__init__
-
-        def __new_init__(self, *args, **kwargs):
-            timeout = kwargs.get('timeout')
-            if timeout is not None and timeout > 5:
-                kwargs['timeout'] = 5
-            __init__(self, *args, **kwargs)
-
-        HubApi.__init__ = __new_init__
-
-        try:
-            yield
-        finally:
-            HubApi.__init__ = __init__
+            self.add_callback(callbacks_map[callback](self))
 
     def _collect_config_info(self) -> Dict[str, str]:
         """
@@ -487,13 +468,52 @@ class SwiftMixin:
             step = int(f.read())
         return step
 
-    def wait_latest_checkpoint(self, timeout=FLASH_CKPT_WAIT_TIMEOUT):
+    def get_resume_checkpoint(self):
+        """
+        Get the path of the last complete checkpoint. Some latter directories
+        may not have the complete checkpoint because the asynchronous
+        persistence may not finish. The step in the `dlrover_latest.txt` is
+        the last step of complete checkpoint. We can get the path by the step.
+        """
+        resume_dir = get_resume_dir(self.args.output_dir)
+        if resume_dir is None:
+            return None
+        tracer_file = os.path.join(resume_dir, 'dlrover_latest.txt')
+        if not os.path.exists(tracer_file):
+            return None
+        with open(tracer_file, 'r') as f:
+            step = int(f.read())
+        checkpoint_folder = f'{PREFIX_CHECKPOINT_DIR}-{step}'
+
+        ckpt_dir = os.path.join(resume_dir, checkpoint_folder)
+        with open(os.path.join(ckpt_dir, TRAINER_STATE_NAME), 'r', encoding='utf-8') as f:
+            train_state = json.load(f)
+        if train_state is not None and train_state.get('max_steps') == step:
+            return None
+        return ckpt_dir
+
+    def get_resume_checkpoint_until_find_ucp(self):
+        resume_dir = get_resume_dir(self.args.output_dir)
+        if resume_dir is None:
+            return None
+        tracer_file = os.path.join(resume_dir, 'ucp.txt')
+        if not os.path.exists(tracer_file):
+            step = 0
+            if step == 0:
+                return None
+        with open(tracer_file, 'r') as f:
+            step = int(f.read())
+        checkpoint_folder = f'{PREFIX_CHECKPOINT_DIR}-{step}'
+        ckpt_dir = os.path.join(resume_dir, checkpoint_folder)
+        return ckpt_dir
+
+    def wait_latest_checkpoint(self, timeout=None, max_steps=None):
         """
         Wait for the latest checkpoint.
         Args:
             timeout (second): The timeout to wait.
         """
-        self.flash_checkpointer.async_save_engine.wait_latest_checkpoint(timeout)
+        self.flash_checkpointer.async_save_engine.wait_latest_checkpoint(timeout, max_steps)
 
     def _fix_zero3_gather_all_parameters(self) -> None:
         if is_deepspeed_zero3_enabled() and not hasattr(self.deepspeed, '_zero3_consolidated_16bit_state_dict_origin'):
@@ -526,9 +546,9 @@ class SwiftMixin:
         return result
 
     def _save_flash_checkpoint(self, model, trial, metrics=None):
+        from dlrover.trainer.torch.flash_checkpoint.hf_trainer import HfDdpCheckpointer, HfDeepSpeedCheckpointer
         from transformers.trainer import DeepSpeedSchedulerWrapper
         from transformers.trainer_utils import SaveStrategy
-        from dlrover.trainer.torch.flash_checkpoint.hf_trainer import HfDdpCheckpointer, HfDeepSpeedCheckpointer
         run_dir = self._get_output_dir(trial=trial)
 
         torch_native_save = torch.save
@@ -616,9 +636,16 @@ class SwiftMixin:
                 rng_states,
                 os.path.join(output_dir, f'rng_state_{self.args.process_index}.pth'),
             )
+        if self.args.save_safetensors:
+            torch.save({'safe_serialization': True}, 'safe_serialization')
+            replace_index_file(output_dir)
 
         torch.save = torch_native_save
-        success = self.flash_checkpointer.save_checkpoint_to_storage(self.state.global_step)
+        if (self.state.global_step == self.state.max_steps):
+            success = self.flash_checkpointer.save_checkpoint_to_storage(self.state.global_step, True)
+        else:
+            success = self.flash_checkpointer.save_checkpoint_to_storage(self.state.global_step)
+
         if not success:
             logger.info(f'Skip saving the checkpoint of step {self.state.global_step} '
                         'because the latest checkpoint is not finished.')
@@ -937,7 +964,11 @@ class SwiftMixin:
             self.control.should_log = False
 
             # all_gather + mean() to get average loss over all processes
-            tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
+            if version.parse(transformers.__version__) >= version.parse('5.2.0'):
+                from transformers.trainer_pt_utils import nested_gather
+                tr_loss_scalar = nested_gather(tr_loss, self.args.parallel_mode).mean().item()
+            else:
+                tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
             loss = tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged)
             logs: Dict[str, float] = {'loss': loss}  # loss first
             if version.parse(transformers.__version__) >= version.parse('4.38'):
@@ -1047,8 +1078,9 @@ class SwiftMixin:
 
     @torch.no_grad()
     def _evalscope_eval(self):
-        from ..pipelines.eval.utils import EvalModel
         from evalscope import TaskConfig, run_task
+
+        from ..pipelines.eval.utils import EvalModel
 
         self.model.eval()
         template = copy(self.template)

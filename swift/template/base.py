@@ -7,16 +7,14 @@ import random
 import re
 import ast
 import json
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from collections import defaultdict
 from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from dataclasses import asdict
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional, Tuple, Union
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from modelscope.hub.utils.utils import get_cache_dir
 from peft import PeftModel
 from PIL import Image
@@ -24,6 +22,7 @@ from torch.nn.utils.rnn import pad_sequence
 from transformers import StoppingCriteriaList
 from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.utils import strtobool
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from swift.utils import Processor, ProcessorMixin, get_env_args, get_logger, remove_response, retry_decorator, to_device
 from .template_inputs import StdTemplateInputs, TemplateInputs
@@ -32,8 +31,8 @@ from .vision_utils import load_audio, load_batch, load_image, rescale_image
 
 logger = get_logger()
 if TYPE_CHECKING:
-    from .template_meta import TemplateMeta
     from swift.infer_engine import InferRequest
+    from .template_meta import TemplateMeta
 
 
 class MaxLengthError(ValueError):
@@ -107,8 +106,8 @@ class Template(ProcessorMixin):
         padding_side: The padding_side when the training batch_size >= 2
         loss_scale: The loss scale function to use
         """
-        from swift.loss_scale import LossScale, get_loss_scale
         from swift.agent_template import agent_template_map
+        from swift.loss_scale import LossScale, get_loss_scale
         self._processor_inited = False
         self._version = 'v6'  # Avoid compatibility issues caused by load_from_cache_file caching.
         self.max_length = max_length
@@ -492,16 +491,6 @@ class Template(ProcessorMixin):
             _encoded['labels'] = labels
         else:
             anchor = inputs.chosen
-            # Ensure that load_data_args true runs through inference successfully
-            # if len(anchor.messages) == 1:
-            #     docs = inputs.positive + inputs.negative
-            #     if docs:
-            #         assistant_messages = docs[0].messages
-            #         assert anchor.messages[0]['role'] == 'user' and assistant_messages[0]['role'] == 'assistant'
-            #         anchor.messages = anchor.messages + assistant_messages
-            #         anchor.images = anchor.images + docs[0].images
-            #         anchor.audios = anchor.audios + docs[0].audios
-            #         anchor.videos = anchor.videos + docs[0].videos
             _encoded = self._encode_truncated(anchor)
             _encoded.pop('labels', None)
         return _encoded
@@ -688,14 +677,14 @@ class Template(ProcessorMixin):
         return model.generate(*args, **kwargs)
 
     def skip_stop_tokens(self, generate_ids: List[int], is_finished: bool = True) -> List[int]:
-        # Do not print template_meta.suffix[-1] and eos_token.
+        # Do not print template_meta.suffix_stop and eos_token.
         # However, other stop_words will be printed.
         tokenizer = self.tokenizer
 
         if len(generate_ids) > 0 and generate_ids[-1] == tokenizer.eos_token_id:
             generate_ids = generate_ids[:-1]
         # skip suffix and eos_token
-        template_suffix = self.template_meta.suffix[-1]
+        template_suffix = self.template_meta.suffix_stop
         if isinstance(template_suffix, str):
             # [-1:]: fix OpenGVLab/Mini-InternVL-Chat-4B-V1-5
             template_suffix = tokenizer.encode(template_suffix, add_special_tokens=False)[-1:]
@@ -833,7 +822,7 @@ class Template(ProcessorMixin):
         elif media_type == 'video':
             if self.mode == 'vllm':
                 # https://github.com/vllm-project/vllm/blob/main/examples/offline_inference/vision_language.py
-                from vllm.assets.video import video_to_ndarrays, video_get_metadata
+                from vllm.assets.video import video_get_metadata, video_to_ndarrays
                 num_frames = get_env_args('vllm_num_frames', int, 16)
                 video_data = video_to_ndarrays(inputs.videos[index], num_frames)
                 video_metadatas = video_get_metadata(inputs.videos[index], num_frames)
@@ -2137,8 +2126,8 @@ Write the response to the user\'s input by strictly aligning with the facts in t
 
         def _flash_attention_forward(*args, **kwargs):
             if use_new_func:
-                from transformers.modeling_flash_attention_utils import (_flash_attention_forward as
-                                                                         flash_attention_forward)
+                from transformers.modeling_flash_attention_utils import \
+                    _flash_attention_forward as flash_attention_forward
                 if args and isinstance(args[0], nn.Module):
                     args = args[1:]
                 if 'is_causal' not in kwargs:
@@ -2170,6 +2159,8 @@ Write the response to the user\'s input by strictly aligning with the facts in t
             media_inputs = to_device(media_inputs, input_ids.device)
             pixel_values = media_inputs['pixel_values'].type(dtype)
             image_embeds = visual(pixel_values, grid_thw=media_inputs['image_grid_thw'])
+            if hasattr(image_embeds, 'pooler_output'):
+                image_embeds = image_embeds.pooler_output
             inputs_embeds = inputs_embeds + image_embeds.mean().to(device=inputs_embeds.device) * 0.
         else:
             if pixel_values is None:
@@ -2183,6 +2174,8 @@ Write the response to the user\'s input by strictly aligning with the facts in t
                 grid_thw = torch.concat([image_grid_thw, video_grid_thw], dim=0)
             pixel_values_mixed = pixel_values_mixed.type(dtype)
             mixed_embeds = visual(pixel_values_mixed, grid_thw=grid_thw)
+            if hasattr(mixed_embeds, 'pooler_output'):
+                mixed_embeds = mixed_embeds.pooler_output
             if pixel_values is None:
                 image_embeds = None
                 video_embeds = mixed_embeds
