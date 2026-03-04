@@ -29,6 +29,32 @@ class GraniteAgentTemplate(BaseAgentTemplate):
             return super().get_toolcall(response)
         return functions
 
+    def _format_tool_responsesEOT(
+        self,
+        assistant_content: str,
+        tool_messages,
+    ) -> Tuple[str, 'Prompt']:
+        with_action = self.keyword.action in assistant_content and self.keyword.action_input in assistant_content
+        if with_action:
+            return super()._format_tool_responses(assistant_content, tool_messages)
+        if hasattr(self, 'template_meta'):
+            prompt = self.template_meta.prompt
+            chat_sep = self.template_meta.chat_sep
+        else:
+            prompt = ['<|start_of_role|>user<|end_of_role|>{{QUERY}}<|end_of_turn|>\n<|start_of_role|>assistant<|end_of_role|>']
+            chat_sep = ['<|end_of_turn|>\n']
+        res = chat_sep.copy()
+        res_tool = []
+        for tool_message in tool_messages:
+            tool_content = tool_message['content']
+            res_tool.append(f'<tool_response>\n{tool_content}\n</tool_response>')
+        total_tool = '\n'.join(res_tool)
+        for context in prompt:
+            if isinstance(context, str):
+                context = context.replace('{{QUERY}}', total_tool)
+            res.append(context)
+        return assistant_content, res
+
     def _format_tool_responses(
         self,
         assistant_content: str,

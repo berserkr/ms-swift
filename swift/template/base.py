@@ -1190,8 +1190,6 @@ Write the response to the user\'s input by strictly aligning with the facts in t
 
     def _swift_encode(self, inputs: StdTemplateInputs):
 
-        logger.info(f'LUISMODS: _swift_encode: {inputs.messages}')
-                
         template_meta = self.template_meta
         if self.use_chat_template:
             if self.add_non_thinking_prefix:
@@ -1301,7 +1299,9 @@ Write the response to the user\'s input by strictly aligning with the facts in t
         else:
             answer_len = 0
 
-        logger.info(f'LUISMODS: _swift_encode: {context_list=}')
+        #if n_round >= 2:
+        #    logger.info(f'LUISMODS: _swift_encode(in): {inputs.messages}')
+        #    logger.info(f'LUISMODS: _swift_encode(out): {context_list=}')
 
         return res_context_list, loss_scale_list, answer_len
 
@@ -1424,10 +1424,10 @@ Write the response to the user\'s input by strictly aligning with the facts in t
                 loss_scale = encoded['prompt_loss_scale'] + encoded['answer_loss_scale']
         else:
             res_context_list, loss_scale_list = self._simplify_context_list(res_context_list, loss_scale_list, inputs)
-
-            logger.info(f'LUISMODS: _encode: {res_context_list}.')
             input_ids, labels, loss_scale = self._encode_context_list(res_context_list, loss_scale_list)
         self._add_dynamic_eos(input_ids, labels, loss_scale, self._encode_context_list(self.template_meta.suffix)[0])
+
+        #logger.info(f'LUISMODS: _encode({template_backend}): {res_context_list}.')
 
         encoded['input_ids'] = input_ids
         encoded['labels'] = labels

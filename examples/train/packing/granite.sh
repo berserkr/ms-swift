@@ -5,9 +5,9 @@
 NPROC_PER_NODE=4 \
 CUDA_VISIBLE_DEVICES=0,1,2,3 \
 swift sft \
-    --model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-3b-base-prerelease-killington-final-hybridclass \
+    --model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-h-tiny-base \
     --tuner_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1216/phase1_mix_1216_v1.jsonl \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1216/phase1_mix_1216_v1_mt_only.jsonl \
     --load_from_cache_file true \
     --split_dataset_ratio 0.01 \
     --torch_dtype bfloat16 \
@@ -21,8 +21,8 @@ swift sft \
     --logging_steps 5 \
     --max_length 16384 \
     --warmup_ratio 0.05 \
-    --dataloader_num_workers 64 \
-    --dataset_num_proc 64 \
+    --dataloader_num_workers 1 \
+    --dataset_num_proc 1 \
     --save_total_limit 2 \
     --save_only_model true \
     --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-sft-test \
@@ -31,4 +31,5 @@ swift sft \
     --agent_template granite_agentic \
     --loss_scale granite \
     --use_chat_template true \
+    --sequence_parallel_size 4 \
 

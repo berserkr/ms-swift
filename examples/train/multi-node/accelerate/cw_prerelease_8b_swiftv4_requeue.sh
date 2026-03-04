@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-mid
 #SBATCH --nodes=16
-#SBATCH --job-name=granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale
+#SBATCH --job-name=granite-4.0-8b-base-prerelease-killington-final-phase1_mix_0223_v2-pack-3ep-4acc-granite-1e-5-16384-swift_v4_2.0scale-stage1-16n-linear
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-8b-base-prerelease-killington-final-phase1_mix_0223_v2-pack-3ep-4acc-granite-1e-5-16384-swift_v4_2.0scale-stage1-16n-linear-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-8b-base-prerelease-killington-final-phase1_mix_0223_v2-pack-3ep-4acc-granite-1e-5-16384-swift_v4_2.0scale-stage1-16n-linear-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -157,36 +157,38 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 export MODELSCOPE_CACHE=/mnt/vast/proj/checkpoints/bathen/cache 
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-base-prerelease-killington-final-phase1_mix_1216_v9-pack-2ep-8acc-granite-5e-5-16384-swift_v3_2.0scale/v0-20260106-071542/checkpoint-2620 \
+export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/granite-4.0-8b-base-prerelease-killington-final \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1216/phase1_mix_1216_v1_mt_only.jsonl \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0223/phase1_mix_0223_v2.jsonl  \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
-    --num_train_epochs 2 \
+    --num_train_epochs 3 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --learning_rate 5e-5 \
-    --gradient_accumulation_steps 8 \
+    --learning_rate 1e-5 \
+    --gradient_accumulation_steps 4 \
     --packing true \
     --eval_steps 100 \
     --save_steps 100 \
     --logging_steps 1 \
     --max_length 16384 \
     --warmup_ratio 0.05 \
-    --dataloader_num_workers 64 \
-    --dataset_num_proc 64 \
+    --dataloader_num_workers 96 \
+    --dataset_num_proc 96 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-base-prerelease-killington-final-phase1_mix_0223_v2-pack-3ep-4acc-granite-1e-5-16384-swift_v4_2.0scale-stage1-16n-linear \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
+    --data_seed 1337 \
     "
-
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale/v0-20251023-072716/checkpoint-1700 \    
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale/v0-20250830-042840/checkpoint-2500 \
+#    --lr_scheduler_type cosine_with_min_lr \
+#    --lr_scheduler_kwargs '{\"min_lr\": 1e-7}' \
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-base-prerelease-killington-final-phase1_mix_0223_v2-pack-3ep-4acc-granite-1e-5-16384-swift_v4_2.0scale-stage1-16n-linear/v0-20251023-072716/checkpoint-1700 \    
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-base-prerelease-killington-final-phase1_mix_0223_v2-pack-3ep-4acc-granite-1e-5-16384-swift_v4_2.0scale-stage1-16n-linear/v0-20250830-042840/checkpoint-2500 \
 #    --loss_scale granite \
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-p1v9-phase1_mix_1216_v1-pack-2ep-8acc-granite-5e-5-16384-swift_v4_2.0scale/v1-20250831-062806/checkpoint-1300
+#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-8b-base-prerelease-killington-final-phase1_mix_0223_v2-pack-3ep-4acc-granite-1e-5-16384-swift_v4_2.0scale-stage1-16n-linear/v1-20250831-062806/checkpoint-1300
 #    --router_aux_loss_coef 1e-3 \
 
 echo $SCRIPT_ARGS >> $LOG

@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=hpc-high
 #SBATCH --nodes=32
-#SBATCH --job-name=granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-5-32768-hybridclass
+#SBATCH --job-name=granite-4.0-micro-base-v9-phase1_mix_1216_v1-pack-2ep-4acc-granite-5e-5-32768-hybridclass
 #SBATCH --ntasks-per-node=1  #<--must be 1 for torchrun / override for others like mpi
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=144 
-#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-5-32768-hybridclass-out.%j.log" 
-#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-5-32768-hybridclass-err.%j.log" 
+#SBATCH --output="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-micro-base-v9-phase1_mix_1216_v1-pack-2ep-4acc-granite-5e-5-32768-hybridclass-out.%j.log" 
+#SBATCH --error="/mnt/vast/proj/checkpoints/bathen/logs/granite-4.0-micro-base-v9-phase1_mix_1216_v1-pack-2ep-4acc-granite-5e-5-32768-hybridclass-err.%j.log" 
 ####SBATCH --open-mode=append
 #SBATCH --wait-all-nodes=1
 #SBATCH --mem=0
@@ -152,12 +152,12 @@ export DISTRIBUTED_ARGS="--mixed_precision bf16 \
     "
 echo $DISTRIBUTED_ARGS >> $LOG
 
-export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granite-4.0-3b-base-prerelease-killington-final-hybridclass \
+export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-micro-base-phase1_mix_1216_v9-pack-2ep-4acc-granite-5e-5-32768/v0-20260128-180549/checkpoint-3842/ \
     --train_type full \
-    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-0830/phase1_mix_0830_v5.jsonl \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1216/phase1_mix_1216_v1.jsonl \
     --torch_dtype bfloat16 \
     --split_dataset_ratio 0.01 \
-    --num_train_epochs 3 \
+    --num_train_epochs 2 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
     --learning_rate 5e-5 \
@@ -173,18 +173,12 @@ export SCRIPT_ARGS="--model /mnt/vast/proj/checkpoints/bathen/models/base/granit
     --dataset_num_proc 64 \
     --save_total_limit 5 \
     --save_only_model true \
-    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-5-32768-hybridclass \
+    --output_dir /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-micro-base-v9-phase1_mix_1216_v1-pack-2ep-4acc-granite-5e-5-32768 \
     --attn_impl flash_attn \
     --use_chat_template true \
     --loss_scale granite \
     --use_liger_kernel true \
-
     "
-
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-4acc-granite-5e-5-32768-hybridclass/v0-20250902-013937/checkpoint-8100
-#    --use_liger_kernel true \
-#    --gradient_checkpointing false \
-#    --resume_from_checkpoint /mnt/vast/proj/checkpoints/granite-4-models-carina/ckpts/sft/granite-4.0-3b-base-prerelease-killington-final-phase1_mix_0830_v5-pack-3ep-2acc-granite-5e-5-32768-hybridclass-dbg/v0-20250828-224635/checkpoint-7900 \
 
 #    --loss_scale granite \
 echo $SCRIPT_ARGS >> $LOG

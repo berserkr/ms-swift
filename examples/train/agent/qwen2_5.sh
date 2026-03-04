@@ -4,7 +4,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 \
 swift sft \
     --model /mnt/vast/proj/checkpoints/bathen/models/base/Qwen2.5-3B \
     --tuner_type full \
-    --dataset AI-ModelScope/function-calling-chatml \
+    --dataset /mnt/vast/proj/datasets/sft-datasets/jsonl/preview_mix/granite-4.0-sft-datasets-1216/phase1_mix_1216_v1_mt_only.jsonl \
     --load_from_cache_file true \
     --split_dataset_ratio 0.01 \
     --agent_template hermes \
