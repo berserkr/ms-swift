@@ -14,6 +14,113 @@ from swift.utils import get_logger
 
 logger = get_logger()
 
+class GraniteThinkingAgentTemplate(BaseAgentTemplate):
+    """Agent template for Granite Thinking models using XML tool call format.
+
+    Tool calls use the format:
+        <tool_call>
+        <function=function_name>
+        <parameter=param1>
+        value1
+        </parameter>
+        </function>
+        </tool_call>
+
+    Tool responses are wrapped in:
+        <tool_response>
+        content
+        </tool_response>
+    """
+
+    def get_toolcall(self, response: str) -> List['Function']:
+        from swift.llm.infer import Function
+        functions = []
+        tool_call_blocks = re.findall(r'<tool_call>(.*?)</tool_call>', response, re.DOTALL)
+        for block in tool_call_blocks:
+            func_match = re.search(r'<function=([^>]+)>', block)
+            if not func_match:
+                continue
+            name = func_match.group(1).strip()
+            params = {}
+            param_matches = re.findall(r'<parameter=([^>]+)>\n?(.*?)\n?</parameter>', block, re.DOTALL)
+            for param_name, param_value in param_matches:
+                param_value = param_value.strip()
+                try:
+                    param_value = json.loads(param_value)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                params[param_name.strip()] = param_value
+            functions.append(Function(name=name, arguments=params))
+        if not functions:
+            return super().get_toolcall(response)
+        return functions
+
+    def _format_tool_responses(
+        self,
+        assistant_content: str,
+        tool_messages,
+    ) -> Tuple[str, 'Prompt']:
+        with_action = self.keyword.action in assistant_content and self.keyword.action_input in assistant_content
+        if with_action:
+            return super()._format_tool_responses(assistant_content, tool_messages)
+        res = ['<|im_end|>\n', '<|im_start|>user\n']
+        for tool_message in tool_messages:
+            tool_content = tool_message['content']
+            res.append(f'<tool_response>\n{tool_content}\n</tool_response>\n')
+        res.append('<|im_end|>\n<|im_start|>assistant\n')
+        return assistant_content, res
+
+    def _format_tools(self, tools: List[Union[str, dict]], system: str, user_message=None) -> str:
+        tool_lines = []
+        tool_lines.append('# Tools\n\nYou have access to the following functions:\n')
+        tool_lines.append('<tools>')
+        for tool in tools:
+            tool = self.unwrap_tool(tool)
+            name = self._get_tool_name(tool)
+            tool_lines.append(f'\n<function>\n<name>{name}</name>')
+            if tool.get('description'):
+                tool_lines.append(f'\n<description>{tool["description"].strip()}</description>')
+            tool_lines.append('\n<parameters>')
+            params = tool.get('parameters', {})
+            if isinstance(params, dict) and 'properties' in params:
+                for pname, pfields in params['properties'].items():
+                    tool_lines.append(f'\n<parameter>\n<name>{pname}</name>')
+                    if 'type' in pfields:
+                        tool_lines.append(f'\n<type>{pfields["type"]}</type>')
+                    if 'description' in pfields:
+                        tool_lines.append(f'\n<description>{pfields["description"].strip()}</description>')
+                    if 'enum' in pfields:
+                        tool_lines.append(f'\n<enum>{json.dumps(pfields["enum"])}</enum>')
+                    tool_lines.append('\n</parameter>')
+            if isinstance(params, dict) and 'required' in params:
+                tool_lines.append(f'\n<required>{json.dumps(params["required"])}</required>')
+            tool_lines.append('\n</parameters>')
+            tool_lines.append('\n</function>')
+        tool_lines.append('\n</tools>')
+        tool_lines.append(
+            '\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:'
+            '\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>'
+            '\nvalue_1\n</parameter>\n<parameter=example_parameter_2>'
+            '\nThis is the value for the second parameter\nthat can span\nmultiple lines'
+            '\n</parameter>\n</function>\n</tool_call>')
+        return ''.join(tool_lines)
+
+    def _format_tool_calls(self, tool_call_messages) -> str:
+        tool_calls = []
+        for message in tool_call_messages:
+            tool_call = self._parse_tool_call(message['content'])
+            name = tool_call['name']
+            args = tool_call['arguments']
+            parts = [f'<tool_call>\n<function={name}>\n']
+            if isinstance(args, dict):
+                for k, v in args.items():
+                    v_str = json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else str(v)
+                    parts.append(f'<parameter={k}>\n{v_str}\n</parameter>\n')
+            parts.append('</function>\n</tool_call>')
+            tool_calls.append(''.join(parts))
+        return '\n'.join(tool_calls)
+
+
 class GraniteAgentTemplate(BaseAgentTemplate):
 
     def get_toolcall(self, response: str) -> List['Function']:

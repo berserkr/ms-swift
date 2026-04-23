@@ -5,6 +5,7 @@ from typing import List
 
 class LLMTemplateType:
     granite = 'granite'
+    granite_thinking = 'granite_thinking'
 
     chatml = 'chatml'
     default = 'default'

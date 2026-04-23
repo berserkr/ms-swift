@@ -10,7 +10,7 @@ from .qwen3_coder import Qwen3_5AgentTemplate, Qwen3CoderAgentTemplate
 from .react import ReactEnAgentTemplate, ReactZnAgentTemplate
 from .seed_oss import SeedAgentTemplate
 from .toolbench import ToolBenchAgentTemplate
-from .granite import GraniteAgentTemplate
+from .granite import GraniteAgentTemplate, GraniteThinkingAgentTemplate
 from .youtu import YoutuAgentTemplate
 
 agent_template_map = {
@@ -40,5 +40,6 @@ agent_template_map = {
     'react_grpo': ReactGRPOAgentTemplate,
     'mistral': MistralAgentTemplate,
     'granite_agentic' : GraniteAgentTemplate,
+    'granite_thinking_agentic': GraniteThinkingAgentTemplate,
     'youtu': YoutuAgentTemplate,
 }

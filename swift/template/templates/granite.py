@@ -56,3 +56,33 @@ class GraniteTemplateMeta(TemplateMeta):
 
 
 register_template(GraniteTemplateMeta(LLMTemplateType.granite))
+
+
+@dataclass
+class GraniteThinkingTemplateMeta(TemplateMeta):
+    """Granite Thinking template — ChatML format with <think>/<\/think> reasoning tags.
+
+    Uses <|im_start|>/<|im_end|> delimiters (same as Qwen/ChatML) with:
+    - Thinking ON: generation prompt ends with <|im_start|>assistant\n<think>\n
+    - Thinking OFF: generation prompt ends with <|im_start|>assistant\n<think></think>
+    - reasoning_content field mapped to <think>...</think> block
+    - Tool calls use <tool_call>/<tool_response> XML format
+    - Tool responses wrapped in <|im_start|>user blocks
+    """
+    prefix: Prompt = field(default_factory=list)
+    prompt: Prompt = field(
+        default_factory=lambda: ['<|im_start|>user\n{{QUERY}}<|im_end|>\n<|im_start|>assistant\n'])
+    chat_sep: Optional[Prompt] = field(default_factory=lambda: ['<|im_end|>\n'])
+    suffix: Prompt = field(default_factory=lambda: ['<|im_end|>\n'])
+    system_prefix: Optional[Prompt] = field(
+        default_factory=lambda: ['<|im_start|>system\n{{SYSTEM}}<|im_end|>\n'])
+    auto_add_bos: bool = False
+    stop_words: List[Word] = field(default_factory=lambda: ['<|im_end|>'])
+    is_thinking: bool = True
+    thinking_prefix: str = '<think>\n'
+    non_thinking_prefix: str = '<think></think>'
+    history_thinking_prefix: str = '<think></think>'
+    agent_template: str = 'granite_thinking_agentic'
+
+
+register_template(GraniteThinkingTemplateMeta(LLMTemplateType.granite_thinking))
