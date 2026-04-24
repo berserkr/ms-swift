@@ -1176,7 +1176,7 @@ class DataLoaderMixin:
         else:
             data_collator = self._get_collator_with_removed_columns(data_collator, description='training')
         if hasattr(dataset, '__len__'):
-            sampler = SequenceParallelSampler(sequence_parallel, dataset, seed=42)
+            sampler = SequenceParallelSampler(sequence_parallel, dataset, seed=self.args.data_seed or 42)
             dataloader_params = {
                 'batch_size': batch_size,
                 'collate_fn': data_collator,

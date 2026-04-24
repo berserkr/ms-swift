@@ -195,8 +195,8 @@ def forward(q, k, v, causal, cu_seqlens, max_seqlen, block_seq_len, dropout_p, s
             'window_size_left': window_size[0],
             'window_size_right': window_size[1],
         })
-    assert k.shape[-0] == cu_seqlens_kv[-1]
-    assert q.shape[-0] == cu_seqlens_q[-1]
+    assert k.shape[0] == cu_seqlens_kv[-1]
+    assert q.shape[0] == cu_seqlens_q[-1]
     assert max_seqlen_q == (cu_seqlens_q[1:] - cu_seqlens_q[:-1]).max().item()
     assert max_seqlen_kv == (cu_seqlens_kv[1:] - cu_seqlens_kv[:-1]).max().item()
     outputs = _flash_attn_varlen_forward(**params)
@@ -472,7 +472,7 @@ def zigzag_ring_flash_attn_varlen_backward(
     for step in range(kv_comm.world_size):
         _, _, block_out, block_lse, _ = out_lse[step]
         if block_out.isnan().any() or block_lse.isnan().any():
-            raise
+            raise RuntimeError(f'NaN detected in block_out or block_lse at backward step {step}')
         block_lse = block_lse.transpose(0, 1).squeeze(2)
 
         if step + 1 != kv_comm.world_size:
@@ -486,7 +486,7 @@ def zigzag_ring_flash_attn_varlen_backward(
             block_dout = block_gradients[step]['grad_block_out']
 
         if block_dout.isnan().any():
-            raise
+            raise RuntimeError(f'NaN detected in block_dout at backward step {step}')
 
         if step == 0:
             backward(
@@ -496,7 +496,7 @@ def zigzag_ring_flash_attn_varlen_backward(
             dk = dk_buffer.to(torch.float32)
             dv = dv_buffer.to(torch.float32)
             if dq.isnan().any() or dk.isnan().any() or dv.isnan().any():
-                raise
+                raise RuntimeError(f'NaN detected in dq/dk/dv after initial backward at step {step}')
         else:
             if step <= kv_comm.rank:
                 k0 = k[half_index0]
@@ -532,7 +532,7 @@ def zigzag_ring_flash_attn_varlen_backward(
                 dk += dk_buffer
                 dv += dv_buffer
             if dq.isnan().any() or dk.isnan().any() or dv.isnan().any():
-                raise
+                raise RuntimeError(f'NaN detected in dq/dk/dv after accumulated backward at step {step}')
         if step + 1 != kv_comm.world_size:
             kv_comm.wait()
             k, v = next_k, next_v

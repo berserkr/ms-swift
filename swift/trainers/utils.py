@@ -73,6 +73,7 @@ def per_token_loss_func_sp(outputs, labels, enable_dft_loss=False, **kwargs) -> 
     device = logits.device
 
     batch_size = logits.shape[0]
+    logits = logits.float()
     logits = logits.view(-1, logits.shape[-1])
     labels = labels.flatten().to(device)
     sploss_parallel_size = int(os.environ.get('CELOSS_PARALLEL_SIZE', '0'))
